@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Image, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, Image, ScrollView, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
 
 const EVSU_Student_DashBoard = () => {
+  const [showItems, setShowItems] = useState(false);
   const [showStores, setShowStores] = useState(false);
 
+  const handleSearchIconClick = () => {
+    setShowItems(true);
+    setShowStores(false);
+  };
+
   const handleStoreIconClick = () => {
+    setShowItems(false);
     setShowStores(true);
   };
 
   const handleHomeIconClick = () => {
+    setShowItems(false);
     setShowStores(false);
   };
 
@@ -27,7 +35,24 @@ const EVSU_Student_DashBoard = () => {
         <Image source={require('./assets/EvsuLOGO.png')} style={styles.logo} resizeMode="contain" />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        {showStores ? (
+        {showItems ? (
+          <View style={styles.itemList}>
+            <ImageBackground source={require('./assets/placeholder.png')} style={styles.itemBackground}>
+              <Image source={require('./assets/placeholder.png')} style={styles.itemImage} resizeMode="contain" />
+              <Text style={styles.itemName}>Ampalaya</Text>
+              <Text style={styles.itemPrice}>₱20</Text>
+              <View style={styles.itemIcons}>
+                <TouchableOpacity>
+                  <Image source={require('./assets/heart_iconsmall.png')} style={styles.icon} resizeMode="contain" />
+                </TouchableOpacity>
+                <TouchableOpacity>
+                  <Image source={require('./assets/basket_icon.png')} style={styles.icon} resizeMode="contain" />
+                </TouchableOpacity>
+              </View>
+            </ImageBackground>
+
+          </View>
+        ) : showStores ? (
           <View style={styles.storeList}>
             <View style={styles.storeItem}>
               <View style={styles.storeImageWrapper}>
@@ -36,30 +61,6 @@ const EVSU_Student_DashBoard = () => {
               <Text style={styles.storeName}>Store 1</Text>
               <Text style={styles.storeOwner}>Owner 1</Text>
               <Text style={styles.storeRating}>★★★★☆</Text>
-            </View>
-            <View style={styles.storeItem}>
-              <View style={styles.storeImageWrapper}>
-                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
-              </View>
-              <Text style={styles.storeName}>Store 2</Text>
-              <Text style={styles.storeOwner}>Owner 2</Text>
-              <Text style={styles.storeRating}>★★★★☆</Text>
-            </View>
-            <View style={styles.storeItem}>
-              <View style={styles.storeImageWrapper}>
-                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
-              </View>
-              <Text style={styles.storeName}>Store 3</Text>
-              <Text style={styles.storeOwner}>Owner 3</Text>
-              <Text style={styles.storeRating}>★☆☆☆☆</Text>
-            </View>
-            <View style={styles.storeItem}>
-              <View style={styles.storeImageWrapper}>
-                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
-              </View>
-              <Text style={styles.storeName}>Store 4</Text>
-              <Text style={styles.storeOwner}>Owner 4</Text>
-              <Text style={styles.storeRating}>★★★★★</Text>
             </View>
           </View>
         ) : (
@@ -79,7 +80,7 @@ const EVSU_Student_DashBoard = () => {
         <TouchableOpacity style={styles.footerIcon} onPress={handleStoreIconClick}>
           <Image source={require('./assets/store_icon.png')} style={styles.footerIconImage} resizeMode="contain" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.footerIcon}>
+        <TouchableOpacity style={styles.footerIcon} onPress={handleSearchIconClick}>
           <Image source={require('./assets/search_iconbig.png')} style={styles.footerIconImage} resizeMode="contain" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.footerIcon}>
@@ -158,6 +159,39 @@ const styles = StyleSheet.create({
     height: 200,
     marginBottom: 10,
   },
+  itemList: {
+    padding: 10,
+    paddingTop: 25,
+    borderRadius: 10,
+  },
+  itemBackground: {
+    marginBottom: 10,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#800000',
+    justifyContent: 'center', 
+  },
+  itemImage: {
+    width: 70,
+    height: 70,
+    marginBottom: 10,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: '#555',
+  },
+  itemIcons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '40%',
+  },
   storeList: {
     padding: 10,
     paddingTop: 25,
@@ -196,24 +230,24 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 11,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
+    flexDirection: 'row', 
+    justifyContent: 'space-around', 
+    padding: 11, 
+    backgroundColor: '#fff', 
+    borderTopLeftRadius: 20, 
     borderTopRightRadius: 20,
   },
-  footerIcon: {
-    padding: 10,
-  },
-  houseIcon: {
+  footerIcon: { 
+    padding: 10, 
+  }, 
+  houseIcon: { 
     width: 26, 
     height: 26, 
-  },
-  footerIconImage: {
-    width: 26,
-    height: 26,
-  },
+  }, 
+  footerIconImage: { 
+    width: 26, 
+    height: 26, 
+  }, 
 });
 
 export default EVSU_Student_DashBoard;
