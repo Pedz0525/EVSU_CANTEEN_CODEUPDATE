@@ -31,12 +31,12 @@ export default function EVSU_Canteen_Login({ navigation }) {
               secureTextEntry
             />
           </View>
-          <TouchableOpacity style={styles.button}>
+          <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Stud_Dashboard')}>
             <Text style={styles.buttonText}>SIGN IN</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.link} onPress={() => {}}>Forget Password</Text> 
+        <Text style={styles.link} onPress={() => navigation.navigate('Forgot')}>Forget Password</Text> 
         <Text style={styles.text}> 
           Don't have an account?{' '} 
           <Text style={styles.link} onPress={() => navigation.navigate('Signup')}>Sign Up</Text> 
@@ -124,5 +124,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-
 
