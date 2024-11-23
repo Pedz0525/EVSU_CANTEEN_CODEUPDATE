@@ -1,7 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, Image, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 
 const EVSU_Student_DashBoard = () => {
+  const [showStores, setShowStores] = useState(false);
+
+  const handleStoreIconClick = () => {
+    setShowStores(true);
+  };
+
+  const handleHomeIconClick = () => {
+    setShowStores(false);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -17,19 +27,56 @@ const EVSU_Student_DashBoard = () => {
         <Image source={require('./assets/EvsuLOGO.png')} style={styles.logo} resizeMode="contain" />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.scrollableContent}>
-          <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-          <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-          <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-          <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-          <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-        </View>
+        {showStores ? (
+          <View style={styles.storeList}>
+            <View style={styles.storeItem}>
+              <View style={styles.storeImageWrapper}>
+                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
+              </View>
+              <Text style={styles.storeName}>Store 1</Text>
+              <Text style={styles.storeOwner}>Owner 1</Text>
+              <Text style={styles.storeRating}>★★★★☆</Text>
+            </View>
+            <View style={styles.storeItem}>
+              <View style={styles.storeImageWrapper}>
+                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
+              </View>
+              <Text style={styles.storeName}>Store 2</Text>
+              <Text style={styles.storeOwner}>Owner 2</Text>
+              <Text style={styles.storeRating}>★★★★☆</Text>
+            </View>
+            <View style={styles.storeItem}>
+              <View style={styles.storeImageWrapper}>
+                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
+              </View>
+              <Text style={styles.storeName}>Store 3</Text>
+              <Text style={styles.storeOwner}>Owner 3</Text>
+              <Text style={styles.storeRating}>★☆☆☆☆</Text>
+            </View>
+            <View style={styles.storeItem}>
+              <View style={styles.storeImageWrapper}>
+                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
+              </View>
+              <Text style={styles.storeName}>Store 4</Text>
+              <Text style={styles.storeOwner}>Owner 4</Text>
+              <Text style={styles.storeRating}>★★★★★</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.scrollableContent}>
+            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
+            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
+            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
+            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
+            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
+          </View>
+        )}
       </ScrollView>
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.footerIcon}>
+        <TouchableOpacity style={styles.footerIcon} onPress={handleHomeIconClick}>
           <Image source={require('./assets/home_icon.png')} style={styles.houseIcon} resizeMode="contain" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.footerIcon}>
+        <TouchableOpacity style={styles.footerIcon} onPress={handleStoreIconClick}>
           <Image source={require('./assets/store_icon.png')} style={styles.footerIconImage} resizeMode="contain" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.footerIcon}>
@@ -110,6 +157,43 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     marginBottom: 10,
+  },
+  storeList: {
+    padding: 10,
+    paddingTop: 25,
+    borderRadius: 10,
+  },
+  storeItem: {
+    marginBottom: 10,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#800000',
+  },
+  storeImageWrapper: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  storeImage: {
+    width: '100%',
+    height: '100%',
+  },
+  storeName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  storeOwner: {
+    fontSize: 14,
+    color: '#555',
+  },
+  storeRating: {
+    fontSize: 14,
+    color: '#888',
   },
   footer: {
     flexDirection: 'row',
