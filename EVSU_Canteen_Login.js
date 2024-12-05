@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 
 export default function EVSU_Canteen_Login({ navigation }) {
@@ -19,7 +20,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.1.23:3001/status");
+      const response = await fetch("http://192.168.254.112:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -44,7 +45,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
     setLoading(true);
     try {
       console.log("Attempting login...");
-      const response = await fetch("http://192.168.1.23:3001/login", {
+      const response = await fetch("http://192.168.254.112:3000/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -60,7 +61,9 @@ export default function EVSU_Canteen_Login({ navigation }) {
       console.log("Login data:", data);
 
       if (data.success) {
-        navigation.replace("Stud_Dashboard");
+        navigation.replace("Stud_Dashboard", {
+          username: username,
+        });
       } else {
         Alert.alert(
           "Login Failed",

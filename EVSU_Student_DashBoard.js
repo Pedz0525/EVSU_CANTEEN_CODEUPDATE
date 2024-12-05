@@ -1,92 +1,463 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Image, ScrollView, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Image,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  ImageBackground,
+  Modal,
+} from "react-native";
 
-const EVSU_Student_DashBoard = () => {
+const EVSU_Student_DashBoard = ({ navigation, route }) => {
+  const { username } = route.params;
   const [showItems, setShowItems] = useState(false);
   const [showStores, setShowStores] = useState(false);
+  const [showProducts, setShowProducts] = useState(true);
+  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
+  const [stores, setStores] = useState([]);
+  const [connectionStatus, setConnectionStatus] = useState(
+    "Checking connection..."
+  );
+  const [products, setProducts] = useState([]);
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [basket, setBasket] = useState([]);
+  const [showBasketModal, setShowBasketModal] = useState(false);
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+
+  const checkConnection = async () => {
+    try {
+      console.log("Checking connection...");
+      const response = await fetch("http://192.168.254.112:3000/status");
+      const data = await response.json();
+      console.log("Connection response:", data);
+      setConnectionStatus("Connected to server ✅");
+    } catch (error) {
+      console.log("Connection error:", error);
+      setConnectionStatus("Not connected to server ❌");
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      console.log("Attempting to fetch stores...");
+
+      const response = await fetch("http://192.168.254.112:3000/vendors");
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Data received:", data);
+
+      if (data.success) {
+        // Verify the data structure
+        console.log("First store:", data.stores[0]);
+        setStores(data.stores);
+        console.log("Stores set successfully");
+      } else {
+        console.error("Failed to fetch stores:", data.message);
+      }
+    } catch (error) {
+      console.error("Error fetching stores:", error);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      console.log("Fetching items from server...");
+      const response = await fetch("http://192.168.254.112:3000/items");
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new TypeError("Response is not JSON");
+      }
+
+      const data = await response.json();
+      console.log("Data received:", data);
+
+      if (data.success) {
+        console.log("Items received:", data.products);
+        setProducts(data.products);
+      } else {
+        console.error("Failed to fetch items:", data.message);
+      }
+    } catch (error) {
+      console.error("Error details:", {
+        message: error.message,
+        type: error.name,
+        stack: error.stack,
+      });
+    }
+  };
+
+  useEffect(() => {
+    checkConnection();
+    fetchStores();
+    fetchProducts();
+  }, []);
 
   const handleSearchIconClick = () => {
     setShowItems(true);
     setShowStores(false);
+    setShowProducts(false);
   };
 
   const handleStoreIconClick = () => {
     setShowItems(false);
     setShowStores(true);
+    setShowProducts(false);
   };
 
   const handleHomeIconClick = () => {
     setShowItems(false);
     setShowStores(false);
+    setShowProducts(true);
+  };
+
+  const handleUserIconClick = () => {
+    navigation.navigate("Profile", { username });
+  };
+
+  const updateQuantity = (change) => {
+    setSelectedProduct((prevProduct) => ({
+      ...prevProduct,
+      quantity: Math.max(1, (prevProduct.quantity || 1) + change),
+    }));
+  };
+
+  const addToBasket = () => {
+    setBasket((prevBasket) => [
+      ...prevBasket,
+      { ...selectedProduct, quantity: selectedProduct.quantity || 1 },
+    ]);
+    setShowQuantityModal(false);
+  };
+
+  const computeTotalAmount = () => {
+    return basket.reduce(
+      (total, item) => total + item.Price * item.quantity,
+      0
+    );
+  };
+
+  const updateBasketItemQuantity = (index, change) => {
+    setBasket((prevBasket) => {
+      const updatedBasket = [...prevBasket];
+      const newQuantity = updatedBasket[index].quantity + change;
+      if (newQuantity > 0) {
+        updatedBasket[index].quantity = newQuantity;
+      }
+      return updatedBasket;
+    });
+  };
+
+  const removeBasketItem = (index) => {
+    setBasket((prevBasket) => prevBasket.filter((_, i) => i !== index));
+  };
+
+  const handlePayment = () => {
+    // Implement payment logic here
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.username}>Username</Text>
-          <TouchableOpacity style={styles.cartIcon}>
-            <Image source={require('./assets/bag_icon.png')} style={styles.icon} resizeMode="contain" />
+          <Text style={styles.username}>{username}</Text>
+          <Text style={styles.connectionStatus}>{connectionStatus}</Text>
+          <TouchableOpacity
+            style={styles.cartIcon}
+            onPress={() => setShowBasketModal(true)}
+          >
+            <Image
+              source={require("./assets/basket_icon.png")}
+              style={styles.icon}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
         </View>
         <TextInput style={styles.searchBar} placeholder="Search" />
       </View>
       <View style={styles.fixedLogoSection}>
-        <Image source={require('./assets/EvsuLOGO.png')} style={styles.logo} resizeMode="contain" />
+        <Image
+          source={require("./assets/EvsuLOGO.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         {showItems ? (
           <View style={styles.itemList}>
-            <ImageBackground source={require('./assets/placeholder.png')} style={styles.itemBackground}>
-              <Image source={require('./assets/placeholder.png')} style={styles.itemImage} resizeMode="contain" />
+            <ImageBackground
+              source={require("./assets/placeholder.png")}
+              style={styles.itemBackground}
+            >
+              <Image
+                source={require("./assets/placeholder.png")}
+                style={styles.itemImage}
+                resizeMode="contain"
+              />
               <Text style={styles.itemName}>Ampalaya</Text>
               <Text style={styles.itemPrice}>₱20</Text>
               <View style={styles.itemIcons}>
                 <TouchableOpacity>
-                  <Image source={require('./assets/heart_iconsmall.png')} style={styles.icon} resizeMode="contain" />
+                  <Image
+                    source={require("./assets/heart_iconsmall.png")}
+                    style={styles.icon}
+                    resizeMode="contain"
+                  />
                 </TouchableOpacity>
                 <TouchableOpacity>
-                  <Image source={require('./assets/basket_icon.png')} style={styles.icon} resizeMode="contain" />
+                  <Image
+                    source={require("./assets/basket_icon.png")}
+                    style={styles.icon}
+                    resizeMode="contain"
+                  />
                 </TouchableOpacity>
               </View>
             </ImageBackground>
-
           </View>
         ) : showStores ? (
           <View style={styles.storeList}>
-            <View style={styles.storeItem}>
-              <View style={styles.storeImageWrapper}>
-                <Image source={require('./assets/placeholder.png')} style={styles.storeImage} resizeMode="contain" />
-              </View>
-              <Text style={styles.storeName}>Store 1</Text>
-              <Text style={styles.storeOwner}>Owner 1</Text>
-              <Text style={styles.storeRating}>★★★★☆</Text>
-            </View>
+            {Array.isArray(stores) && stores.length > 0 ? (
+              stores.map((store, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.storeItem}
+                  onPress={() =>
+                    navigation.navigate("StoreProduct", {
+                      storeName: store.name,
+                      storeLocation: store.Stall_name,
+                    })
+                  }
+                >
+                  <View style={styles.storeImageWrapper}>
+                    <Image
+                      source={require("./assets/placeholder.png")}
+                      style={styles.storeImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <Text style={styles.storeName}>{store.name}</Text>
+                  <Text style={styles.storeOwner}>{store.Stall_name}</Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.noDataText}>No stores available</Text>
+            )}
           </View>
-        ) : (
-          <View style={styles.scrollableContent}>
-            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
-            <Image source={require('./assets/placeholder.png')} style={styles.image} resizeMode="contain" />
+        ) : showProducts ? (
+          <View style={styles.productList}>
+            {products.map((product, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.productItem}
+                onPress={() => {
+                  setSelectedProduct(product);
+                  setShowQuantityModal(true);
+                }}
+              >
+                <Image
+                  source={{ uri: product.item_image }}
+                  style={styles.productImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.productName}>{product.item_name}</Text>
+                <Text style={styles.productPrice}>₱{product.Price}</Text>
+                <Text style={styles.storeName}>{product.vendor_username}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        )}
+        ) : null}
       </ScrollView>
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.footerIcon} onPress={handleHomeIconClick}>
-          <Image source={require('./assets/home_icon.png')} style={styles.houseIcon} resizeMode="contain" />
+        <TouchableOpacity
+          style={styles.footerIcon}
+          onPress={handleHomeIconClick}
+        >
+          <Image
+            source={require("./assets/home_icon.png")}
+            style={styles.footerIconImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.footerIcon} onPress={handleStoreIconClick}>
-          <Image source={require('./assets/store_icon.png')} style={styles.footerIconImage} resizeMode="contain" />
+        <TouchableOpacity
+          style={styles.footerIcon}
+          onPress={handleStoreIconClick}
+        >
+          <Image
+            source={require("./assets/store_icon.png")}
+            style={styles.footerIconImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.footerIcon} onPress={handleSearchIconClick}>
-          <Image source={require('./assets/search_iconbig.png')} style={styles.footerIconImage} resizeMode="contain" />
+        <TouchableOpacity
+          style={styles.footerIcon}
+          onPress={handleSearchIconClick}
+        >
+          <Image
+            source={require("./assets/search_iconbig.png")}
+            style={styles.footerIconImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.footerIcon}>
-          <Image source={require('./assets/user_icon.png')} style={styles.footerIconImage} resizeMode="contain" />
+        <TouchableOpacity
+          style={styles.footerIcon}
+          onPress={handleUserIconClick}
+        >
+          <Image
+            source={require("./assets/user_icon.png")}
+            style={styles.footerIconImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       </View>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showFavoritesModal}
+        onRequestClose={() => setShowFavoritesModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Store Options</Text>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.popularButton}
+                onPress={() => console.log("Popular clicked")}
+              >
+                <Text style={styles.buttonText}>Popular</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.favoriteButton}
+                onPress={() => console.log("Favorites clicked")}
+              >
+                <Text style={styles.buttonText}>Favorites</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowFavoritesModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showQuantityModal}
+        onRequestClose={() => setShowQuantityModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalSmallContent}>
+            <Text style={styles.modalTitle}>Select Quantity</Text>
+            {selectedProduct && (
+              <>
+                <Text style={styles.itemText}>{selectedProduct.ItemName}</Text>
+                <Text style={styles.itemText}>₱{selectedProduct.Price}</Text>
+                <View style={styles.quantityContainer}>
+                  <TouchableOpacity
+                    style={styles.quantityButton}
+                    onPress={() => updateQuantity(-1)}
+                  >
+                    <Text style={styles.buttonText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.quantityText}>
+                    {selectedProduct.quantity || 1}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.quantityButton}
+                    onPress={() => updateQuantity(1)}
+                  >
+                    <Text style={styles.buttonText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={addToBasket}
+                >
+                  <Text style={styles.buttonText}>Add to Basket</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowQuantityModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showBasketModal}
+        onRequestClose={() => setShowBasketModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Your Basket</Text>
+            <ScrollView style={styles.basketList}>
+              {basket.map((item, index) => (
+                <View key={index} style={styles.basketItem}>
+                  <Text style={styles.itemText}>{item.ItemName}</Text>
+                  <Text style={styles.itemText}>
+                    ₱{item.Price} x {item.quantity}
+                  </Text>
+                  <View style={styles.basketItemControls}>
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => updateBasketItemQuantity(index, -1)}
+                    >
+                      <Text style={styles.buttonText}>-</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => updateBasketItemQuantity(index, 1)}
+                    >
+                      <Text style={styles.buttonText}>+</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.removeButton}
+                      onPress={() => removeBasketItem(index)}
+                    >
+                      <Text style={styles.buttonText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+            <Text style={styles.totalAmount}>
+              Total: ₱{computeTotalAmount()}
+            </Text>
+            <TouchableOpacity
+              style={styles.paymentButton}
+              onPress={() => handlePayment()}
+            >
+              <Text style={styles.buttonText}>Proceed to Payment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowBasketModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -94,31 +465,31 @@ const EVSU_Student_DashBoard = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#D9D9D9',
+    backgroundColor: "#D9D9D9",
   },
   header: {
     paddingTop: 38,
     padding: 10,
-    backgroundColor: '#800000',
-    position: 'absolute',
+    backgroundColor: "#800000",
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     zIndex: 1,
   },
   headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingBottom: 10,
   },
   username: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
     flex: 1,
   },
   searchBar: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 5,
     paddingHorizontal: 10,
     marginHorizontal: 10,
@@ -131,11 +502,11 @@ const styles = StyleSheet.create({
     height: 24,
   },
   fixedLogoSection: {
-    alignItems: 'center',
+    alignItems: "center",
     padding: 5,
-    backgroundColor: '#800000',
-    position: 'absolute',
-    top: 138, 
+    backgroundColor: "#800000",
+    position: "absolute",
+    top: 138,
     left: 0,
     right: 0,
     zIndex: 1,
@@ -143,21 +514,57 @@ const styles = StyleSheet.create({
   logo: {
     width: 80,
     height: 80,
-    marginBottom: -40, 
+    marginBottom: -40,
   },
   content: {
-    paddingTop: 180, 
+    paddingTop: 180,
   },
   scrollableContent: {
-    alignItems: 'center',
-    backgroundColor: '#D9D9D9',
+    alignItems: "center",
+    backgroundColor: "#D9D9D9",
     padding: 10,
     paddingTop: 25,
   },
+  productContainer: {
+    width: "50%",
+    marginBottom: 20,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
   image: {
-    width: '100%',
-    height: 200,
-    marginBottom: 10,
+    width: "50%",
+    height: 100,
+    borderRadius: 10,
+    alignSelf: "center",
+  },
+  productDetails: {
+    padding: 10,
+    alignItems: "center",
+  },
+  productName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#800000",
+    marginBottom: 5,
+  },
+  productPrice: {
+    fontSize: 16,
+    color: "#333",
+    marginBottom: 5,
+  },
+  storeName: {
+    fontSize: 14,
+    color: "#666",
   },
   itemList: {
     padding: 10,
@@ -166,12 +573,12 @@ const styles = StyleSheet.create({
   },
   itemBackground: {
     marginBottom: 10,
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    alignItems: "center",
+    backgroundColor: "#fff",
     padding: 10,
     borderRadius: 10,
-    backgroundColor: '#800000',
-    justifyContent: 'center', 
+    backgroundColor: "#800000",
+    justifyContent: "center",
   },
   itemImage: {
     width: 70,
@@ -180,17 +587,17 @@ const styles = StyleSheet.create({
   },
   itemName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: "bold",
+    color: "black",
   },
   itemPrice: {
     fontSize: 14,
-    color: '#555',
+    color: "#555",
   },
   itemIcons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '40%',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "40%",
   },
   storeList: {
     padding: 10,
@@ -199,55 +606,232 @@ const styles = StyleSheet.create({
   },
   storeItem: {
     marginBottom: 10,
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    alignItems: "center",
+    backgroundColor: "#fff",
     padding: 10,
     borderRadius: 10,
-    backgroundColor: '#800000',
+    backgroundColor: "red",
   },
   storeImageWrapper: {
     width: 70,
     height: 70,
     borderRadius: 35,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 10,
   },
   storeImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   storeName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: "bold",
+    color: "#000",
   },
   storeOwner: {
     fontSize: 14,
-    color: '#555',
-  },
-  storeRating: {
-    fontSize: 14,
-    color: '#888',
+    color: "#555",
   },
   footer: {
-    flexDirection: 'row', 
-    justifyContent: 'space-around', 
-    padding: 11, 
-    backgroundColor: '#fff', 
-    borderTopLeftRadius: 20, 
+    flexDirection: "row",
+    justifyContent: "space-around",
+    padding: 11,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
-  footerIcon: { 
-    padding: 10, 
-  }, 
-  houseIcon: { 
-    width: 26, 
-    height: 26, 
-  }, 
-  footerIconImage: { 
-    width: 26, 
-    height: 26, 
-  }, 
+  footerIcon: {
+    padding: 10,
+  },
+  houseIcon: {
+    width: 26,
+    height: 26,
+  },
+  footerIconImage: {
+    width: 26,
+    height: 26,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    width: "90%",
+    height: "80%",
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  modalSmallContent: {
+    width: "90%",
+    height: "50%",
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 20,
+  },
+  popularButton: {
+    backgroundColor: "#800000",
+    padding: 10,
+    borderRadius: 10,
+    flex: 1,
+    marginRight: 5,
+  },
+  favoriteButton: {
+    backgroundColor: "#800000",
+    padding: 10,
+    borderRadius: 10,
+    flex: 1,
+    marginLeft: 5,
+  },
+  buttonText: {
+    color: "white",
+    textAlign: "center",
+    fontSize: 14,
+  },
+  closeButton: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: "#800000",
+    borderRadius: 10,
+  },
+  closeButtonText: {
+    color: "white",
+    textAlign: "center",
+  },
+  quantityContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "30%",
+    marginBottom: 20,
+  },
+  quantityButton: {
+    backgroundColor: "#800000",
+    padding: 10,
+    borderRadius: 10,
+    flex: 1,
+    marginRight: 5,
+  },
+  quantityText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#800000",
+    marginHorizontal: 10,
+  },
+  addButton: {
+    backgroundColor: "#800000",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    marginTop: 10,
+    alignSelf: "center",
+  },
+  basketList: {
+    width: "100%",
+    marginBottom: 20,
+  },
+  basketItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+  },
+  totalAmount: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+  basketItemControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+  quantityButton: {
+    backgroundColor: "#800000",
+    padding: 5,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
+  removeButton: {
+    backgroundColor: "#ff0000",
+    padding: 5,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
+  paymentButton: {
+    backgroundColor: "#800000",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    marginTop: 10,
+    alignSelf: "center",
+  },
+  productList: {
+    padding: 10,
+    paddingTop: 25,
+    borderRadius: 10,
+  },
+  productItem: {
+    marginBottom: 10,
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 15,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  productImage: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    overflow: "hidden",
+    marginBottom: 10,
+    alignSelf: "center",
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#000",
+  },
+  productPrice: {
+    fontSize: 14,
+    color: "#555",
+  },
+  storeName: {
+    fontSize: 14,
+    color: "#666",
+  },
+  noDataText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#800000",
+    textAlign: "center",
+    marginTop: 20,
+  },
 });
-
 export default EVSU_Student_DashBoard;

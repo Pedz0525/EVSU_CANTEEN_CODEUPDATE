@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigation } from "@react-navigation/native";
 import {
   StyleSheet,
@@ -17,7 +17,28 @@ export default function EVSU_Canteen_Signup({ navigation }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState(
+    "Checking connection..."
+  );
 
+  const checkConnection = async () => {
+    try {
+      console.log("Checking connection...");
+      const response = await fetch("http://192.168.254.112:3000/status");
+      const data = await response.json();
+      console.log("Connection response:", data);
+      setConnectionStatus("Connected to server ✅");
+    } catch (error) {
+      console.log("Connection error:", error);
+      setConnectionStatus("Not connected to server ❌");
+    }
+  };
+
+  useEffect(() => {
+    checkConnection();
+    const interval = setInterval(checkConnection, 5000);
+    return () => clearInterval(interval);
+  }, []);
   const handleSignUp = async () => {
     if (!name || !email || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields");
@@ -31,7 +52,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch("http://192.168.1.23:3001/signup", {
+      const response = await fetch("http://192.168.254.112:3000/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -75,6 +96,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
       <View style={styles.overlay}>
         <View style={styles.header}>
           <Text style={styles.headerText}>REGISTRATION</Text>
+          <Text style={styles.connectionStatus}>{connectionStatus}</Text>
         </View>
         <View style={styles.form}>
           <TextInput
@@ -153,5 +175,11 @@ const styles = StyleSheet.create({
   loginLinkText: {
     color: "#007AFF",
     fontSize: 14,
+  },
+  connectionStatus: {
+    textAlign: "center",
+    marginBottom: 10,
+    fontSize: 12,
+    color: "#666",
   },
 });
