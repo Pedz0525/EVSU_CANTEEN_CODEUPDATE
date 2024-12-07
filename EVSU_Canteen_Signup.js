@@ -24,7 +24,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.112:3000/status");
+      const response = await fetch("http://192.168.254.108:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -52,7 +52,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch("http://192.168.254.112:3000/signup", {
+      const response = await fetch("http://192.168.254.108:3000/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -8,6 +8,7 @@ import {
   View,
   Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function EVSU_Canteen_Login({ navigation }) {
   const [username, setUsername] = useState("");
@@ -20,7 +21,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.112:3000/status");
+      const response = await fetch("http://192.168.254.108:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -45,7 +46,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
     setLoading(true);
     try {
       console.log("Attempting login...");
-      const response = await fetch("http://192.168.254.112:3000/login", {
+      const response = await fetch("http://192.168.254.108:3000/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -61,6 +62,12 @@ export default function EVSU_Canteen_Login({ navigation }) {
       console.log("Login data:", data);
 
       if (data.success) {
+        // Store user data in AsyncStorage
+        await AsyncStorage.setItem("username", username);
+        await AsyncStorage.setItem("student_id", String(data.student_id));
+
+        console.log("Stored student_id:", data.student_id); // Debug log
+
         navigation.replace("Stud_Dashboard", {
           username: username,
         });
@@ -83,7 +90,6 @@ export default function EVSU_Canteen_Login({ navigation }) {
       setLoading(false);
     }
   };
-
   return (
     <View style={styles.container}>
       <View style={styles.imageContainer}>

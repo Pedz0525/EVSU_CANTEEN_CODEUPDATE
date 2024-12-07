@@ -7,8 +7,12 @@ import {
   Image,
   TextInput,
   Alert,
+  Modal,
+  FlatList,
+  ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const Profile = ({ navigation, route }) => {
   const { username: initialUsername } = route.params;
@@ -17,15 +21,16 @@ const Profile = ({ navigation, route }) => {
   const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const handleAccountSettings = () => {
     setShowEditProfile(true);
   };
 
   const handleBack = () => {
-    setUsername(initialUsername);
-    setPassword("");
-    setShowEditProfile(false);
+    navigation.goBack();
   };
 
   const handleLogout = () => {
@@ -64,7 +69,7 @@ const Profile = ({ navigation, route }) => {
     try {
       console.log("Fetching profile image for username:", username);
       const response = await fetch(
-        `http://192.168.254.112:3000/customer/profile/${encodeURIComponent(
+        `http://192.168.254.108:3000/customer/profile/${encodeURIComponent(
           username
         )}`
       );
@@ -121,7 +126,7 @@ const Profile = ({ navigation, route }) => {
       console.log("Sending request with formData:", formData);
 
       const response = await fetch(
-        "http://192.168.254.112:3000/customer/profile/update",
+        "http://192.168.254.108:3000/customer/profile/update",
         {
           method: "POST",
           body: formData,
@@ -156,38 +161,124 @@ const Profile = ({ navigation, route }) => {
     }
   };
 
+  const handleViewOrders = () => {
+    setShowOrdersModal(true);
+    fetchOrders();
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const username = await AsyncStorage.getItem("username");
+      if (!username) {
+        Alert.alert("Error", "User not found");
+        return;
+      }
+
+      const response = await fetch(
+        `http://192.168.254.108:3000/orders/${username}`
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        setOrders(data.orders);
+      } else {
+        Alert.alert("Error", data.message || "Failed to fetch orders");
+      }
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      Alert.alert("Error", "Failed to fetch orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + " " + date.toLocaleTimeString();
+  };
+
+  const renderOrderItem = ({ item }) => (
+    <View style={styles.orderCard}>
+      <View style={styles.orderHeader}>
+        <Text style={styles.orderNumber}>Order #{item.order_id}</Text>
+        <Text
+          style={[
+            styles.orderStatus,
+            {
+              color:
+                item.status === "pending"
+                  ? "#FFA500"
+                  : item.status === "completed"
+                  ? "#008000"
+                  : "#FF0000",
+            },
+          ]}
+        >
+          {item.status.toUpperCase()}
+        </Text>
+      </View>
+
+      <Text style={styles.orderDate}>
+        Ordered on: {formatDate(item.order_date)}
+      </Text>
+
+      <View style={styles.itemsContainer}>
+        {item.items.map((orderItem, index) => (
+          <View key={index} style={styles.orderItem}>
+            <Text style={styles.itemName}>{orderItem.item_name}</Text>
+            <View style={styles.itemDetails}>
+              <Text style={styles.quantity}>x{orderItem.quantity}</Text>
+              <Text style={styles.price}>₱{orderItem.price}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.totalContainer}>
+        <Text style={styles.totalText}>Total Amount: ₱{item.total_price}</Text>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerText}>Profile</Text>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+          <Image
+            source={require("./assets/icons8-back-30.png")}
+            style={styles.backIcon}
+          />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.centerContent}>
-        {!showEditProfile && (
-          <View style={styles.iconContainer}>
-            <View style={styles.iconWrapper}>
-              <Image
-                source={require("./assets/icons8-bag-30.png")}
-                style={styles.icon}
-              />
-              <Text style={styles.iconText}>Orders</Text>
-            </View>
-            <View style={styles.iconWrapper}>
-              <Image
-                source={require("./assets/icons8-food-basket-30.png")}
-                style={styles.icon}
-              />
-              <Text style={styles.iconText}>Basket</Text>
-            </View>
-            <View style={styles.iconWrapper}>
-              <Image
-                source={require("./assets/icons8-star-30.png")}
-                style={styles.icon}
-              />
-              <Text style={styles.iconText}>Favorites</Text>
-            </View>
+        <View style={styles.iconContainer}>
+          <TouchableOpacity
+            onPress={handleViewOrders}
+            style={styles.iconWrapper}
+          >
+            <Image
+              source={require("./assets/icons8-bag-30.png")}
+              style={styles.icon}
+            />
+            <Text style={styles.iconText}>Orders</Text>
+          </TouchableOpacity>
+          {/* <View style={styles.iconWrapper}>
+            <Image
+              source={require("./assets/icons8-food-basket-30.png")}
+              style={styles.icon}
+            />
+            <Text style={styles.iconText}>Basket</Text>
+          </View> */}
+          <View style={styles.iconWrapper}>
+            <Image
+              source={require("./assets/icons8-star-30.png")}
+              style={styles.icon}
+            />
+            <Text style={styles.iconText}>Favorites</Text>
           </View>
-        )}
+        </View>
 
         <View style={styles.menuContainer}>
           {showEditProfile ? (
@@ -266,6 +357,45 @@ const Profile = ({ navigation, route }) => {
             </View>
           )}
         </View>
+
+        <Modal
+          visible={showOrdersModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowOrdersModal(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>My Orders</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowOrdersModal(false)}
+                >
+                  <Image
+                    source={require("./assets/icons8-close-30.png")}
+                    style={styles.closeIcon}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {loading ? (
+                <ActivityIndicator size="large" color="#800000" />
+              ) : orders.length > 0 ? (
+                <FlatList
+                  data={orders}
+                  renderItem={renderOrderItem}
+                  keyExtractor={(item) => item.order_id.toString()}
+                  contentContainerStyle={styles.ordersList}
+                />
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No orders found</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     </View>
   );
@@ -280,6 +410,9 @@ const styles = StyleSheet.create({
     paddingTop: 38,
     padding: 20,
     backgroundColor: "#800000",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   headerText: {
     color: "#fff",
@@ -345,11 +478,12 @@ const styles = StyleSheet.create({
     color: "#800000",
   },
   backButton: {
-    marginBottom: 20,
+    padding: 5,
   },
-  backButtonText: {
-    fontSize: 18,
-    color: "#800000",
+  backIcon: {
+    width: 24,
+    height: 24,
+    tintColor: "#fff",
   },
   profilePhotoContainer: {
     alignItems: "center",
@@ -422,6 +556,132 @@ const styles = StyleSheet.create({
   usernameText: {
     fontSize: 18,
     color: "#333",
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    height: "90%",
+    marginHorizontal: 20,
+    borderRadius: 20,
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#800000",
+  },
+  closeButton: {
+    padding: 10,
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: "#800000",
+  },
+  ordersList: {
+    paddingBottom: 20,
+  },
+  orderCard: {
+    backgroundColor: "#f8f8f8",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  orderHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  orderNumber: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#800000",
+  },
+  orderStatus: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  orderDate: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 10,
+  },
+  itemsContainer: {
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    paddingTop: 10,
+  },
+  orderItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  itemName: {
+    fontSize: 16,
+    flex: 1,
+  },
+  itemDetails: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  quantity: {
+    fontSize: 16,
+    color: "#666",
+    marginRight: 10,
+  },
+  price: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  totalContainer: {
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    paddingTop: 10,
+    marginTop: 10,
+    alignItems: "flex-end",
+  },
+  totalText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#800000",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#800000",
+  },
+  closeIcon: {
+    width: 24,
+    height: 24,
+    tintColor: "#800000",
   },
 });
 

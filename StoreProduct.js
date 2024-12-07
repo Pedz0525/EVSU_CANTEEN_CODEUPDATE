@@ -8,14 +8,24 @@ import {
   TouchableOpacity,
   Modal,
   Button,
+  TextInput,
+  Alert,
 } from "react-native";
+import { useBasket } from "./BasketContext";
+import FloatingBasket from "./FloatingBasket";
+import { useNavigation } from "@react-navigation/native";
 
 export default function StoreProduct({ route }) {
+  const navigation = useNavigation();
   const { storeName, storeLocation } = route.params;
   const [activeTab, setActiveTab] = useState("SHOP");
   const [products, setProducts] = useState([]);
   const [categoryProducts, setCategoryProducts] = useState([]);
   const [isModalVisible, setModalVisible] = useState(false);
+  const { addToBasket, basket } = useBasket();
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (activeTab === "PRODUCTS") {
@@ -24,7 +34,7 @@ export default function StoreProduct({ route }) {
           console.log("Current store/vendor:", storeName);
 
           const response = await fetch(
-            `http://192.168.254.112:3000/items/${encodeURIComponent(storeName)}`
+            `http://192.168.254.108:3000/items/${encodeURIComponent(storeName)}`
           );
           console.log("Fetching items for vendor:", storeName);
 
@@ -61,7 +71,7 @@ export default function StoreProduct({ route }) {
       const encodedCategory = encodeURIComponent(category);
 
       const response = await fetch(
-        `http://192.168.254.112:3000/categories/${encodedStoreName}?category=${encodedCategory}`
+        `http://192.168.254.108:3000/categories/${encodedStoreName}?category=${encodedCategory}`
       );
 
       console.log("Fetching from:", {
@@ -73,6 +83,10 @@ export default function StoreProduct({ route }) {
       console.log("API Response:", data);
 
       if (data.success) {
+        // Log the first product to verify the structure
+        if (data.products.length > 0) {
+          console.log("Sample product:", data.products[0]);
+        }
         setCategoryProducts(data.products);
         setModalVisible(true);
       } else {
@@ -85,8 +99,49 @@ export default function StoreProduct({ route }) {
     }
   };
 
+  const incrementQuantity = () => {
+    setQuantity((prev) => prev + 1);
+  };
+
+  const decrementQuantity = () => {
+    if (quantity > 1) {
+      setQuantity((prev) => prev - 1);
+    }
+  };
+
+  const handleAddToBasket = (product) => {
+    const itemWithQuantity = {
+      id: String(Date.now()),
+      item_name: product.item_name,
+      Price: product.Price,
+      item_image: product.item_image,
+      quantity: quantity,
+      vendor_username: product.vendor_username,
+    };
+
+    addToBasket(itemWithQuantity);
+    console.log("Current basket:", basket);
+    setShowQuantityModal(false);
+    setQuantity(1);
+    Alert.alert("Success", "Item added to basket!");
+  };
+
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerText}>Store Products</Text>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+          <Image
+            source={require("./assets/icons8-back-30.png")}
+            style={styles.backIcon}
+          />
+        </TouchableOpacity>
+      </View>
+
       {/* Header for Store Name and Location */}
       <View style={styles.header}>
         <Text style={styles.storeName}>{storeName}</Text>
@@ -157,6 +212,15 @@ export default function StoreProduct({ route }) {
                 />
                 <Text style={styles.productName}>{product.item_name}</Text>
                 <Text style={styles.productPrice}>₱{product.Price}</Text>
+                <TouchableOpacity
+                  style={styles.basketButton}
+                  onPress={() => {
+                    setSelectedProduct(product);
+                    setShowQuantityModal(true);
+                  }}
+                >
+                  <Text style={styles.basketButtonText}>Add to Basket</Text>
+                </TouchableOpacity>
               </View>
             ))}
           </ScrollView>
@@ -221,22 +285,39 @@ export default function StoreProduct({ route }) {
             <Text style={styles.modalTitle}>
               {storeName} -{" "}
               {categoryProducts.length > 0
-                ? categoryProducts[0].category
+                ? categoryProducts[0].Category
                 : "No Products"}
             </Text>
-            <Button title="Close" onPress={() => setModalVisible(false)} />
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => setModalVisible(false)}
+            >
+              <Image
+                source={require("./assets/icons8-back-30.png")}
+                style={styles.backIcon}
+              />
+            </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={styles.productsContainer}>
             {categoryProducts.length > 0 ? (
               categoryProducts.map((product, index) => (
                 <View key={index} style={styles.product}>
                   <Image
-                    source={{ uri: product.ImageItem }}
+                    source={{ uri: product.item_image }}
                     style={styles.productImage}
                   />
-                  <Text style={styles.productName}>{product.itemName}</Text>
-                  <Text style={styles.productPrice}>₱{product.price}</Text>
-                  <Text style={styles.categoryText}>{product.category}</Text>
+                  <Text style={styles.productName}>{product.item_name}</Text>
+                  <Text style={styles.productPrice}>₱{product.Price}</Text>
+                  <Text style={styles.categoryText}>{product.Category}</Text>
+                  <TouchableOpacity
+                    style={styles.basketButton}
+                    onPress={() => {
+                      setSelectedProduct(product);
+                      setShowQuantityModal(true);
+                    }}
+                  >
+                    <Text style={styles.basketButtonText}>Add to Basket</Text>
+                  </TouchableOpacity>
                 </View>
               ))
             ) : (
@@ -249,6 +330,78 @@ export default function StoreProduct({ route }) {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Quantity Modal */}
+      <Modal
+        visible={showQuantityModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowQuantityModal(false);
+          setQuantity(1);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Quantity</Text>
+
+            {selectedProduct && (
+              <View style={styles.productInfo}>
+                <Text style={styles.productNameModal}>
+                  {selectedProduct.item_name}
+                </Text>
+                <Text style={styles.productPriceModal}>
+                  ₱{selectedProduct.Price}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.quantitySelector}>
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => {
+                  if (quantity > 1) {
+                    setQuantity(quantity - 1);
+                  }
+                }}
+              >
+                <Text style={styles.quantityButtonText}>-</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.quantityText}>{quantity}</Text>
+
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => setQuantity(quantity + 1)}
+              >
+                <Text style={styles.quantityButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowQuantityModal(false);
+                  setQuantity(1);
+                }}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.addButton]}
+                onPress={() => handleAddToBasket(selectedProduct)}
+              >
+                <Text style={styles.buttonText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add FloatingBasket at the end */}
+      <FloatingBasket />
     </View>
   );
 }
@@ -257,12 +410,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
+    position: "relative",
   },
   header: {
     marginTop: 50,
     padding: 16,
-    backgroundColor: "#ff4c4c",
-    alignItems: "flex-start",
+    backgroundColor: "#800000",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  headerText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#fff",
   },
   storeName: {
     fontSize: 24,
@@ -363,13 +524,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
+    padding: 20,
+    backgroundColor: "#800000",
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
+    color: "#fff",
+    flex: 1, // This allows the title to wrap if needed
+    marginRight: 10, // Adds some space between title and button
   },
   noProductsContainer: {
     flex: 1,
@@ -386,5 +549,102 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginTop: 4,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 10,
+    width: "80%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 15,
+    textAlign: "center",
+    color: "#800000",
+  },
+  productInfo: {
+    marginBottom: 15,
+  },
+  productNameModal: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  productPriceModal: {
+    fontSize: 14,
+    color: "#800000",
+    marginTop: 5,
+  },
+  quantitySelector: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  quantityButton: {
+    backgroundColor: "#800000",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 15,
+  },
+  quantityButtonText: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  quantityText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    minWidth: 40,
+    textAlign: "center",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  modalButton: {
+    padding: 10,
+    borderRadius: 5,
+    width: "45%",
+  },
+  cancelButton: {
+    backgroundColor: "#666",
+  },
+  addButton: {
+    backgroundColor: "#800000",
+  },
+  buttonText: {
+    color: "white",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  basketButton: {
+    backgroundColor: "#800000",
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
+    width: "100%",
+  },
+  basketButtonText: {
+    color: "white",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  backButton: {
+    padding: 5,
+  },
+  backIcon: {
+    width: 24,
+    height: 24,
+    tintColor: "#fff", // Makes the icon white to match header text
   },
 });

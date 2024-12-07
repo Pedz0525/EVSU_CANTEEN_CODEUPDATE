@@ -20,7 +20,7 @@ const ResetPassword = ({ route, navigation }) => {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.113:3000/status");
+      const response = await fetch("http://192.168.254.108:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -48,7 +48,7 @@ const ResetPassword = ({ route, navigation }) => {
 
     try {
       const response = await fetch(
-        "http://192.168.254.113:3000/reset-password",
+        "http://192.168.254.108:3000/reset-password",
         {
           method: "POST",
           headers: {

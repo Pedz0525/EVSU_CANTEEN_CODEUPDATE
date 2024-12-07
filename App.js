@@ -12,68 +12,77 @@ import resetpassword from "./resetpassword";
 import UserTypeSelection from "./UserTypeSelection";
 import VendorDashboard from "./VendorDashboard";
 import StoreProduct from "./StoreProduct";
+import Basket from "./Basket";
+import { BasketProvider } from "./BasketContext";
 const Stack = createStackNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
-        <Stack.Screen
-          name="Login"
-          component={EVSU_Canteen_Login}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Signup"
-          component={EVSU_Canteen_Signup}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Forgot"
-          component={EVSU_Canteen_Forgot}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="VerifyOTP" // Add this screen
-          component={VerifyOTP}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="ResetPassword"
-          component={ResetPassword}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Stud_Dashboard"
-          component={EVSU_Student_DashBoard}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Profile"
-          component={Profile}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="resetpassword"
-          component={resetpassword}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="UserTypeSelection"
-          component={UserTypeSelection}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="VendorDashboard"
-          component={VendorDashboard}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="StoreProduct"
-          component={StoreProduct}
-          options={{ headerShown: false }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <BasketProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Login">
+          <Stack.Screen
+            name="Login"
+            component={EVSU_Canteen_Login}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Signup"
+            component={EVSU_Canteen_Signup}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Forgot"
+            component={EVSU_Canteen_Forgot}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="VerifyOTP" // Add this screen
+            component={VerifyOTP}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ResetPassword"
+            component={ResetPassword}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Stud_Dashboard"
+            component={EVSU_Student_DashBoard}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={Profile}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="resetpassword"
+            component={resetpassword}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="UserTypeSelection"
+            component={UserTypeSelection}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="VendorDashboard"
+            component={VendorDashboard}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="StoreProduct"
+            component={StoreProduct}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Basket"
+            component={Basket}
+            options={{ headerShown: false }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </BasketProvider>
   );
 }

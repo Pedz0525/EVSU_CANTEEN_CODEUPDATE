@@ -16,12 +16,13 @@ const upload = multer({
 const app = express();
 app.use(
   cors({
-    origin: ["http://192.168.254.112:3000", "http://localhost:3000"],
+    origin: ["http://192.168.254.108:3000", "http://localhost:3000"],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Add logging for debugging
 app.use((req, res, next) => {
@@ -100,7 +101,13 @@ app.post("/login", (req, res) => {
     }
 
     if (results.length > 0) {
-      res.json({ success: true, message: "Login successful" });
+      // Send back the customer_id along with success message
+      res.json({
+        success: true,
+        message: "Login successful",
+        student_id: results[0].id, // Assuming 'id' is your customer/student ID column
+        username: results[0].name,
+      });
     } else {
       res.json({ success: false, message: "Invalid username or password" });
     }
@@ -609,49 +616,52 @@ app.get("/products/:storeName", (req, res) => {
 });
 
 // New endpoint to fetch products by StoreName and Category
-app.get("/categories/:storeName", (req, res) => {
-  const { storeName } = req.params;
+app.get("/categories/:vendorUsername", (req, res) => {
+  const { vendorUsername } = req.params;
   const { category } = req.query;
 
   console.log("Request received with:", {
-    storeName: storeName,
+    vendorUsername: vendorUsername,
     category: category,
   });
 
   const query = `
-    SELECT itemName, ImageItem, price, category, StoreName
-    FROM products 
-    WHERE LOWER(StoreName) = LOWER(?) 
-    AND LOWER(category) = LOWER(?)
+    SELECT item_name, item_image, Price, Category, vendor_username
+    FROM items 
+    WHERE LOWER(vendor_username) = LOWER(?) 
+    AND LOWER(Category) = LOWER(?)
   `;
 
-  console.log("Executing query with params:", [storeName, category]);
+  console.log("Executing query with params:", [vendorUsername, category]);
 
-  db.query(query, [storeName, category], (err, results) => {
+  db.query(query, [vendorUsername, category], (err, results) => {
     if (err) {
       console.error("Database error:", err);
       return res.json({
         success: false,
-        message: "Failed to fetch category products",
+        message: "Failed to fetch category items",
         error: err.message,
       });
     }
 
     try {
-      const productsWithImages = results.map((product) => ({
-        ...product,
-        ImageItem: product.ImageItem
-          ? `data:image/jpeg;base64,${product.ImageItem.toString("base64")}`
+      const itemsWithImages = results.map((item) => ({
+        item_name: item.item_name,
+        item_image: item.item_image
+          ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
           : null,
+        Price: item.Price,
+        Category: item.Category,
+        vendor_username: item.vendor_username,
       }));
 
       console.log(
-        `Found ${productsWithImages.length} products for ${storeName} in ${category}`
+        `Found ${itemsWithImages.length} items for ${vendorUsername} in ${category}`
       );
 
       res.json({
         success: true,
-        products: productsWithImages,
+        products: itemsWithImages,
       });
     } catch (error) {
       console.error("Error processing images:", error);
@@ -817,3 +827,247 @@ app.post(
     }
   }
 );
+
+app.get("/orders/create", (req, res) => {
+  res.json({ message: "Orders API is working" });
+});
+
+app.post("/orders/create", async (req, res) => {
+  try {
+    console.log("Received order data:", JSON.stringify(req.body, null, 2));
+
+    const { customer_id, vendor_id, total_price, status, items } = req.body;
+
+    // Get customer ID
+    const checkCustomerQuery =
+      "SELECT customer_id FROM customers WHERE name = ?";
+
+    db.query(
+      checkCustomerQuery,
+      [customer_id],
+      (customerErr, customerResult) => {
+        if (customerErr || customerResult.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Customer not found",
+            error: customerErr ? customerErr.message : "No customer found",
+          });
+        }
+
+        const actualCustomerId = customerResult[0].customer_id;
+
+        // Get vendor ID
+        const checkVendorQuery = "SELECT vendor_id FROM vendors WHERE name = ?";
+
+        db.query(checkVendorQuery, [vendor_id], (vendorErr, vendorResult) => {
+          if (vendorErr || vendorResult.length === 0) {
+            return res.status(400).json({
+              success: false,
+              message: `Vendor not found: ${vendor_id}`,
+            });
+          }
+
+          const actualVendorId = vendorResult[0].vendor_id;
+
+          // Create the order
+          const orderQuery =
+            "INSERT INTO orders (customer_id, vendor_id, order_date, total_price, status) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)";
+
+          db.query(
+            orderQuery,
+            [actualCustomerId, actualVendorId, total_price, status],
+            (orderErr, orderResult) => {
+              if (orderErr) {
+                return res.status(500).json({
+                  success: false,
+                  message: "Failed to create order",
+                  error: orderErr.message,
+                });
+              }
+
+              const order_id = orderResult.insertId;
+
+              // Process each item
+              const processItems = items.map((item) => {
+                return new Promise((resolve, reject) => {
+                  // Get the item from the items table using item_name and vendor
+                  const itemQuery =
+                    "SELECT item_id FROM items WHERE item_name = ? AND vendor_username = ?";
+                  db.query(
+                    itemQuery,
+                    [item.item_name, item.vendor_username],
+                    (itemErr, itemResult) => {
+                      if (itemErr) {
+                        console.error("Item query error:", itemErr);
+                        reject(itemErr);
+                        return;
+                      }
+
+                      if (itemResult.length === 0) {
+                        console.error("Item not found:", item);
+                        reject(new Error(`Item not found: ${item.item_name}`));
+                        return;
+                      }
+
+                      const actualItemId = itemResult[0].item_id;
+
+                      // Insert into order_items
+                      const orderItemQuery =
+                        "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)";
+                      db.query(
+                        orderItemQuery,
+                        [order_id, actualItemId, item.quantity, item.Price],
+                        (orderItemErr) => {
+                          if (orderItemErr) {
+                            console.error(
+                              "Order item insert error:",
+                              orderItemErr
+                            );
+                            reject(orderItemErr);
+                          } else {
+                            resolve();
+                          }
+                        }
+                      );
+                    }
+                  );
+                });
+              });
+
+              Promise.all(processItems)
+                .then(() => {
+                  res.json({
+                    success: true,
+                    message: "Order created successfully",
+                    order_id: order_id,
+                  });
+                })
+                .catch((error) => {
+                  console.error("Error processing items:", error);
+                  res.status(500).json({
+                    success: false,
+                    message: "Failed to create order items",
+                    error: error.message,
+                  });
+                });
+            }
+          );
+        });
+      }
+    );
+  } catch (error) {
+    console.error("Server error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create order",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/orders/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    console.log("Fetching orders for username:", username);
+
+    // First get the customer_id from the customers table
+    const customerQuery = "SELECT customer_id FROM customers WHERE name = ?";
+
+    db.query(
+      customerQuery,
+      [username.trim()],
+      (customerErr, customerResult) => {
+        if (customerErr) {
+          console.error("Error finding customer:", customerErr);
+          return res.status(500).json({
+            success: false,
+            message: "Error finding customer",
+          });
+        }
+
+        if (customerResult.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Customer not found",
+          });
+        }
+
+        const customerId = customerResult[0].customer_id;
+        console.log("Found customer_id:", customerId);
+
+        // Get all orders with their items for this customer
+        const ordersQuery = `
+        SELECT 
+          o.order_id,
+          o.order_date,
+          o.total_price,
+          o.status,
+          v.name as vendor_name,
+          i.item_name,
+          oi.quantity,
+          oi.price as item_price
+        FROM orders o
+        JOIN vendors v ON o.vendor_id = v.vendor_id
+        JOIN order_items oi ON o.order_id = oi.order_id
+        JOIN items i ON oi.item_id = i.item_id
+        WHERE o.customer_id = ?
+        ORDER BY o.order_date DESC
+      `;
+
+        db.query(ordersQuery, [customerId], (err, results) => {
+          if (err) {
+            console.error("Error fetching orders:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Failed to fetch orders",
+            });
+          }
+
+          // Group the results by order
+          const orders = results.reduce((acc, row) => {
+            const order = acc.find((o) => o.order_id === row.order_id);
+
+            if (order) {
+              // Add item to existing order
+              order.items.push({
+                item_name: row.item_name,
+                quantity: row.quantity,
+                price: row.item_price,
+              });
+            } else {
+              // Create new order
+              acc.push({
+                order_id: row.order_id,
+                order_date: row.order_date,
+                total_price: row.total_price,
+                status: row.status,
+                vendor_name: row.vendor_name,
+                items: [
+                  {
+                    item_name: row.item_name,
+                    quantity: row.quantity,
+                    price: row.item_price,
+                  },
+                ],
+              });
+            }
+            return acc;
+          }, []);
+
+          console.log("Sending orders:", orders.length);
+          res.json({
+            success: true,
+            orders: orders,
+          });
+        });
+      }
+    );
+  } catch (error) {
+    console.error("Server error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch orders",
+      error: error.message,
+    });
+  }
+});

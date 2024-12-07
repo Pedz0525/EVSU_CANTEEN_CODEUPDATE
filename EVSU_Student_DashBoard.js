@@ -9,7 +9,10 @@ import {
   TouchableOpacity,
   ImageBackground,
   Modal,
+  Alert,
 } from "react-native";
+import { useBasket } from "./BasketContext";
+import FloatingBasket from "./FloatingBasket";
 
 const EVSU_Student_DashBoard = ({ navigation, route }) => {
   const { username } = route.params;
@@ -27,11 +30,13 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
   const [basket, setBasket] = useState([]);
   const [showBasketModal, setShowBasketModal] = useState(false);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const { addToBasket } = useBasket();
+  const [quantity, setQuantity] = useState("1");
 
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.112:3000/status");
+      const response = await fetch("http://192.168.254.108:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -45,7 +50,7 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
     try {
       console.log("Attempting to fetch stores...");
 
-      const response = await fetch("http://192.168.254.112:3000/vendors");
+      const response = await fetch("http://192.168.254.108:3000/vendors");
       console.log("Response status:", response.status);
 
       if (!response.ok) {
@@ -71,7 +76,7 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
   const fetchProducts = async () => {
     try {
       console.log("Fetching items from server...");
-      const response = await fetch("http://192.168.254.112:3000/items");
+      const response = await fetch("http://192.168.254.108:3000/items");
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -135,12 +140,20 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
     }));
   };
 
-  const addToBasket = () => {
-    setBasket((prevBasket) => [
-      ...prevBasket,
-      { ...selectedProduct, quantity: selectedProduct.quantity || 1 },
-    ]);
+  const handleAddToBasket = (product, selectedQuantity) => {
+    const itemWithQuantity = {
+      id: String(Date.now()),
+      item_name: product.item_name,
+      Price: product.Price,
+      item_image: product.item_image,
+      quantity: selectedQuantity,
+      vendor_username: product.vendor_username,
+    };
+
+    addToBasket(itemWithQuantity);
     setShowQuantityModal(false);
+    setQuantity(1);
+    Alert.alert("Success", "Item added to basket!");
   };
 
   const computeTotalAmount = () => {
@@ -176,14 +189,14 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
           <Text style={styles.username}>{username}</Text>
           <Text style={styles.connectionStatus}>{connectionStatus}</Text>
           <TouchableOpacity
-            style={styles.cartIcon}
-            onPress={() => setShowBasketModal(true)}
+            style={styles.basketIcon}
+            onPress={() => navigation.navigate("Basket")}
           >
-            <Image
+            {/* <Image
               source={require("./assets/basket_icon.png")}
-              style={styles.icon}
-              resizeMode="contain"
-            />
+              style={styles.basketImage}
+            /> */}
+            {/* <Text style={styles.basketCount}>{basket.length}</Text> */}
           </TouchableOpacity>
         </View>
         <TextInput style={styles.searchBar} placeholder="Search" />
@@ -355,49 +368,69 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
         </View>
       </Modal>
       <Modal
-        animationType="slide"
-        transparent={true}
         visible={showQuantityModal}
-        onRequestClose={() => setShowQuantityModal(false)}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowQuantityModal(false);
+          setQuantity(1);
+        }}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalSmallContent}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Quantity</Text>
+
             {selectedProduct && (
-              <>
-                <Text style={styles.itemText}>{selectedProduct.ItemName}</Text>
-                <Text style={styles.itemText}>₱{selectedProduct.Price}</Text>
-                <View style={styles.quantityContainer}>
-                  <TouchableOpacity
-                    style={styles.quantityButton}
-                    onPress={() => updateQuantity(-1)}
-                  >
-                    <Text style={styles.buttonText}>-</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.quantityText}>
-                    {selectedProduct.quantity || 1}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.quantityButton}
-                    onPress={() => updateQuantity(1)}
-                  >
-                    <Text style={styles.buttonText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={addToBasket}
-                >
-                  <Text style={styles.buttonText}>Add to Basket</Text>
-                </TouchableOpacity>
-              </>
+              <View style={styles.productInfo}>
+                <Text style={styles.productNameModal}>
+                  {selectedProduct.item_name}
+                </Text>
+                <Text style={styles.productPriceModal}>
+                  ₱{selectedProduct.Price}
+                </Text>
+              </View>
             )}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowQuantityModal(false)}
-            >
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
+
+            <View style={styles.quantitySelector}>
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => {
+                  if (quantity > 1) {
+                    setQuantity(quantity - 1);
+                  }
+                }}
+              >
+                <Text style={styles.quantityButtonText}>-</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.quantityText}>{quantity}</Text>
+
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => setQuantity(quantity + 1)}
+              >
+                <Text style={styles.quantityButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowQuantityModal(false);
+                  setQuantity(1);
+                }}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.addButton]}
+                onPress={() => handleAddToBasket(selectedProduct, quantity)}
+              >
+                <Text style={styles.buttonText}>Add to Basket</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -458,6 +491,7 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+      <FloatingBasket />
     </View>
   );
 };
@@ -466,6 +500,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#D9D9D9",
+    position: "relative",
   },
   header: {
     paddingTop: 38,
@@ -832,6 +867,111 @@ const styles = StyleSheet.create({
     color: "#800000",
     textAlign: "center",
     marginTop: 20,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 10,
+    width: "80%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 15,
+    textAlign: "center",
+    color: "#800000",
+  },
+  productInfo: {
+    marginBottom: 15,
+  },
+  productNameModal: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  productPriceModal: {
+    fontSize: 14,
+    color: "#800000",
+    marginTop: 5,
+  },
+  quantityInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 15,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  modalButton: {
+    padding: 10,
+    borderRadius: 5,
+    width: "45%",
+  },
+  cancelButton: {
+    backgroundColor: "#666",
+  },
+  addButton: {
+    backgroundColor: "#800000",
+  },
+  buttonText: {
+    color: "white",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  basketIcon: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    alignItems: "center",
+  },
+  basketImage: {
+    width: 30,
+    height: 30,
+  },
+  basketCount: {
+    fontSize: 12,
+    color: "#fff",
+    backgroundColor: "#800000",
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    position: "absolute",
+    top: -5,
+    right: -5,
+  },
+  quantitySelector: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  quantityButton: {
+    backgroundColor: "#800000",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 15,
+  },
+  quantityButtonText: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  quantityText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    minWidth: 40,
+    textAlign: "center",
   },
 });
 export default EVSU_Student_DashBoard;
