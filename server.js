@@ -5,6 +5,8 @@ const nodemailer = require("nodemailer");
 const multer = require("multer");
 const fs = require("fs").promises;
 const sharp = require("sharp");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -16,7 +18,7 @@ const upload = multer({
 const app = express();
 app.use(
   cors({
-    origin: ["http://192.168.254.108:3000", "http://localhost:3000"],
+    origin: ["http://192.168.0.106:3000", "http://localhost:3000"],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   })
@@ -88,12 +90,14 @@ app.get("/test", (req, res) => {
 });
 
 // Login endpoint
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   console.log("Login request received:", req.body);
   const { username, password } = req.body;
-  const query = "SELECT * FROM customers WHERE name = ? AND password = ?";
 
-  db.query(query, [username, password], (err, results) => {
+  // Query to check for either username or email
+  const query = "SELECT * FROM customers WHERE username = ? OR email = ?";
+
+  db.query(query, [username, username], async (err, results) => {
     if (err) {
       console.error("Login error:", err);
       res.json({ success: false, message: "Database error" });
@@ -101,55 +105,106 @@ app.post("/login", (req, res) => {
     }
 
     if (results.length > 0) {
-      // Send back the customer_id along with success message
-      res.json({
-        success: true,
-        message: "Login successful",
-        student_id: results[0].id, // Assuming 'id' is your customer/student ID column
-        username: results[0].name,
-      });
+      try {
+        // Compare the provided password with the hashed password
+        const match = await bcrypt.compare(password, results[0].password);
+
+        if (match) {
+          // Password matches, send back user info including the name
+          res.json({
+            success: true,
+            message: "Login successful",
+            student_id: results[0].id,
+            username: results[0].username,
+            name: results[0].name,
+            email: results[0].email,
+          });
+        } else {
+          res.json({
+            success: false,
+            message: "Invalid password",
+          });
+        }
+      } catch (error) {
+        console.error("Password comparison error:", error);
+        res.json({
+          success: false,
+          message: "Error verifying password",
+        });
+      }
     } else {
-      res.json({ success: false, message: "Invalid username or password" });
+      res.json({
+        success: false,
+        message: "User not found",
+      });
     }
   });
 });
 
 // Add this new endpoint
-app.post("/signup", (req, res) => {
-  const { name, email, password } = req.body;
+app.post("/signup", async (req, res) => {
+  const { name, username, email, password } = req.body;
 
   // Basic validation
-  if (!name || !email || !password) {
+  if (!name || !username || !email || !password) {
     return res.json({
       success: false,
       message: "Please provide all required fields",
     });
   }
 
-  // Insert new user
-  const query =
-    "INSERT INTO customers (name, email, password) VALUES (?, ?, ?)";
-  db.query(query, [name, email, password], (err, results) => {
-    if (err) {
-      console.error("Signup error:", err);
-      // Check for duplicate email
-      if (err.code === "ER_DUP_ENTRY") {
+  try {
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Check if username or email already exists
+    const checkQuery =
+      "SELECT * FROM customers WHERE username = ? OR email = ?";
+    db.query(checkQuery, [username, email], (checkErr, checkResults) => {
+      if (checkErr) {
+        console.error("Database check error:", checkErr);
         return res.json({
           success: false,
-          message: "Email already exists",
+          message: "Database error",
         });
       }
-      return res.json({
-        success: false,
-        message: "Database error",
-      });
-    }
 
-    res.json({
-      success: true,
-      message: "User registered successfully",
+      if (checkResults.length > 0) {
+        return res.json({
+          success: false,
+          message: "Username or email already exists",
+        });
+      }
+
+      // Insert new user
+      const insertQuery =
+        "INSERT INTO customers (name, username, email, password) VALUES (?, ?, ?, ?)";
+      db.query(
+        insertQuery,
+        [name, username, email, hashedPassword],
+        (err, results) => {
+          if (err) {
+            console.error("Signup error:", err);
+            return res.json({
+              success: false,
+              message: "Failed to create account",
+            });
+          }
+
+          res.json({
+            success: true,
+            message: "User registered successfully",
+          });
+        }
+      );
     });
-  });
+  } catch (error) {
+    console.error("Password hashing error:", error);
+    res.json({
+      success: false,
+      message: "Error creating account",
+    });
+  }
 });
 
 const PORT = 3000;
@@ -764,24 +819,51 @@ app.post(
   async (req, res) => {
     try {
       const { username, password } = req.body;
-      const profileImage = req.file ? req.file.buffer : null;
+      let updateQuery = "UPDATE customers SET";
+      let queryParams = [];
+      let updates = [];
 
-      console.log("Updating profile for username:", username);
-
-      let query = "UPDATE customers SET ";
-      const queryParams = [];
-      const updates = [];
-
-      if (profileImage) {
-        updates.push("profile_image = ?");
-        queryParams.push(profileImage);
+      // If username is provided, add it to the update
+      if (username) {
+        updates.push(" name = ?");
+        queryParams.push(username);
       }
 
+      // If password is provided, hash it before updating
       if (password) {
-        updates.push("password = ?");
-        queryParams.push(password);
+        try {
+          const hashedPassword = await bcrypt.hash(password, saltRounds);
+          updates.push(" password = ?");
+          queryParams.push(hashedPassword);
+        } catch (hashError) {
+          console.error("Password hashing error:", hashError);
+          return res.status(500).json({
+            success: false,
+            message: "Error processing password update",
+          });
+        }
       }
 
+      // Handle profile image if provided
+      if (req.file) {
+        try {
+          const resizedImage = await sharp(req.file.buffer)
+            .resize(300, 300)
+            .jpeg({ quality: 90 })
+            .toBuffer();
+
+          updates.push(" profile_image = ?");
+          queryParams.push(resizedImage);
+        } catch (imageError) {
+          console.error("Image processing error:", imageError);
+          return res.status(500).json({
+            success: false,
+            message: "Error processing image",
+          });
+        }
+      }
+
+      // If no updates provided
       if (updates.length === 0) {
         return res.json({
           success: false,
@@ -789,40 +871,30 @@ app.post(
         });
       }
 
-      query += updates.join(", ");
-      query += " WHERE name = ?";
-      queryParams.push(username);
+      // Complete the query
+      updateQuery += updates.join(",") + " WHERE username = ?";
+      queryParams.push(username); // Add username for WHERE clause
 
-      console.log("Executing query:", query);
-
-      db.query(query, queryParams, (err, results) => {
+      // Execute the update query
+      db.query(updateQuery, queryParams, (err, result) => {
         if (err) {
-          console.error("Database error:", err);
+          console.error("Update error:", err);
           return res.json({
             success: false,
             message: "Failed to update profile",
-            error: err.message,
           });
         }
 
-        if (results.affectedRows > 0) {
-          res.json({
-            success: true,
-            message: "Profile updated successfully",
-          });
-        } else {
-          res.json({
-            success: false,
-            message: "No profile found to update",
-          });
-        }
+        res.json({
+          success: true,
+          message: "Profile updated successfully",
+        });
       });
     } catch (error) {
       console.error("Server error:", error);
       res.status(500).json({
         success: false,
-        message: "Internal server error",
-        error: error.message,
+        message: "Server error while updating profile",
       });
     }
   }
@@ -1068,6 +1140,62 @@ app.get("/orders/:username", async (req, res) => {
       success: false,
       message: "Failed to fetch orders",
       error: error.message,
+    });
+  }
+});
+
+app.get("/search", async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    const searchQuery = `
+      SELECT item_name, item_image, Price, vendor_username
+      FROM items
+      WHERE item_name LIKE ?
+    `;
+
+    db.query(searchQuery, [`%${query}%`], (err, results) => {
+      if (err) {
+        console.error("Search error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Error searching items",
+        });
+      }
+
+      try {
+        // Convert binary image data to base64
+        const itemsWithImages = results.map((item) => ({
+          item_name: item.item_name,
+          item_image: item.item_image
+            ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
+            : null,
+          Price: item.Price,
+          vendor_username: item.vendor_username,
+        }));
+
+        console.log(
+          `Found ${itemsWithImages.length} items matching "${query}"`
+        );
+
+        res.json({
+          success: true,
+          items: itemsWithImages,
+        });
+      } catch (error) {
+        console.error("Error processing images:", error);
+        res.status(500).json({
+          success: false,
+          message: "Error processing images",
+          error: error.message,
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Server error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while searching",
     });
   }
 });

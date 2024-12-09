@@ -78,7 +78,7 @@ const Basket = () => {
 
         try {
           const response = await fetch(
-            "http://192.168.254.108:3000/orders/create",
+            "http://192.168.0.106:3000/orders/create",
             {
               method: "POST",
               headers: {

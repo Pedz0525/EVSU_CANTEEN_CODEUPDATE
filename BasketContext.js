@@ -7,9 +7,11 @@ export const BasketProvider = ({ children }) => {
 
   const addToBasket = (item) => {
     setBasket((currentBasket) => {
-      // Check if item already exists in basket
+      // Check if item already exists in basket by comparing item_name and vendor_username
       const existingItemIndex = currentBasket.findIndex(
-        (basketItem) => basketItem.id === item.id
+        (basketItem) =>
+          basketItem.item_name === item.item_name &&
+          basketItem.vendor_username === item.vendor_username
       );
 
       if (existingItemIndex >= 0) {
@@ -25,7 +27,13 @@ export const BasketProvider = ({ children }) => {
       }
 
       // Add new item if it doesn't exist
-      return [...currentBasket, item];
+      return [
+        ...currentBasket,
+        {
+          ...item,
+          id: `${item.item_name}-${item.vendor_username}-${Date.now()}`, // Create unique ID
+        },
+      ];
     });
   };
 

@@ -34,7 +34,7 @@ export default function StoreProduct({ route }) {
           console.log("Current store/vendor:", storeName);
 
           const response = await fetch(
-            `http://192.168.254.108:3000/items/${encodeURIComponent(storeName)}`
+            `http://192.168.254.110:3000/items/${encodeURIComponent(storeName)}`
           );
           console.log("Fetching items for vendor:", storeName);
 
@@ -71,7 +71,7 @@ export default function StoreProduct({ route }) {
       const encodedCategory = encodeURIComponent(category);
 
       const response = await fetch(
-        `http://192.168.254.108:3000/categories/${encodedStoreName}?category=${encodedCategory}`
+        `http://192.168.254.110:3000/categories/${encodedStoreName}?category=${encodedCategory}`
       );
 
       console.log("Fetching from:", {
@@ -133,7 +133,7 @@ export default function StoreProduct({ route }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerText}>Store Products</Text>
+        <Text style={styles.storeName}>{storeName}</Text>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Image
             source={require("./assets/icons8-back-30.png")}
@@ -142,9 +142,7 @@ export default function StoreProduct({ route }) {
         </TouchableOpacity>
       </View>
 
-      {/* Header for Store Name and Location */}
-      <View style={styles.header}>
-        <Text style={styles.storeName}>{storeName}</Text>
+      <View style={styles.subHeader}>
         <Text style={styles.storeLocation}>{storeLocation}</Text>
       </View>
 
@@ -420,20 +418,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  headerText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-  },
   storeName: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#fff",
+    flex: 1,
+  },
+  subHeader: {
+    backgroundColor: "#800000",
+    padding: 8,
+    paddingTop: 0,
   },
   storeLocation: {
     fontSize: 16,
     color: "#fff",
-    marginTop: 4,
   },
   navBar: {
     flexDirection: "row",

@@ -13,6 +13,7 @@ import {
 
 export default function EVSU_Canteen_Signup({ navigation }) {
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -24,7 +25,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.108:3000/status");
+      const response = await fetch("http://192.168.254.110:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -40,7 +41,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
     return () => clearInterval(interval);
   }, []);
   const handleSignUp = async () => {
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name || !username || !email || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
@@ -52,13 +53,14 @@ export default function EVSU_Canteen_Signup({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch("http://192.168.254.108:3000/signup", {
+      const response = await fetch("http://192.168.254.110:3000/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           name,
+          username,
           email,
           password,
         }),
@@ -101,15 +103,23 @@ export default function EVSU_Canteen_Signup({ navigation }) {
         <View style={styles.form}>
           <TextInput
             style={styles.input}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
+            placeholder="Full Name"
+            value={name}
+            onChangeText={setName}
           />
           <TextInput
             style={styles.input}
             placeholder="Username"
-            value={name}
-            onChangeText={setName}
+            value={username}
+            onChangeText={setUsername}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
           />
           <TextInput
             style={styles.input}
@@ -126,7 +136,12 @@ export default function EVSU_Canteen_Signup({ navigation }) {
             onChangeText={setConfirmPassword}
           />
 
-          <Button title="Sign Up" onPress={handleSignUp} color="#ff4c4c" />
+          <Button
+            title={loading ? "Creating Account..." : "Sign Up"}
+            onPress={handleSignUp}
+            color="#ff4c4c"
+            disabled={loading}
+          />
           <TouchableOpacity
             style={styles.loginLink}
             onPress={() => navigation.navigate("Login")}

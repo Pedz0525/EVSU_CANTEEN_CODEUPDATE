@@ -32,11 +32,13 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const { addToBasket } = useBasket();
   const [quantity, setQuantity] = useState("1");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
 
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.108:3000/status");
+      const response = await fetch("http://192.168.0.106:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -50,7 +52,7 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
     try {
       console.log("Attempting to fetch stores...");
 
-      const response = await fetch("http://192.168.254.108:3000/vendors");
+      const response = await fetch("http://192.168.0.106:3000/vendors");
       console.log("Response status:", response.status);
 
       if (!response.ok) {
@@ -76,7 +78,7 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
   const fetchProducts = async () => {
     try {
       console.log("Fetching items from server...");
-      const response = await fetch("http://192.168.254.108:3000/items");
+      const response = await fetch("http://192.168.0.106:3000/items");
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -102,6 +104,23 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
         type: error.name,
         stack: error.stack,
       });
+    }
+  };
+
+  const handleSearch = async (query) => {
+    try {
+      const response = await fetch(
+        `http://192.168.0.106:3000/search?query=${query}`
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.success) {
+        setSearchResults(data.items);
+      }
+    } catch (error) {
+      console.error("Search error:", error);
     }
   };
 
@@ -199,7 +218,20 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
             {/* <Text style={styles.basketCount}>{basket.length}</Text> */}
           </TouchableOpacity>
         </View>
-        <TextInput style={styles.searchBar} placeholder="Search" />
+        <TextInput
+          style={styles.searchBar}
+          placeholder="Search"
+          onFocus={() => setShowItems(true)}
+          value={searchQuery}
+          onChangeText={(text) => {
+            setSearchQuery(text);
+            if (text.length > 0) {
+              handleSearch(text);
+            } else {
+              setSearchResults([]);
+            }
+          }}
+        />
       </View>
       <View style={styles.fixedLogoSection}>
         <Image
@@ -211,34 +243,25 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
       <ScrollView contentContainerStyle={styles.content}>
         {showItems ? (
           <View style={styles.itemList}>
-            <ImageBackground
-              source={require("./assets/placeholder.png")}
-              style={styles.itemBackground}
-            >
-              <Image
-                source={require("./assets/placeholder.png")}
-                style={styles.itemImage}
-                resizeMode="contain"
-              />
-              <Text style={styles.itemName}>Ampalaya</Text>
-              <Text style={styles.itemPrice}>₱20</Text>
-              <View style={styles.itemIcons}>
-                <TouchableOpacity>
-                  <Image
-                    source={require("./assets/heart_iconsmall.png")}
-                    style={styles.icon}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity>
-                  <Image
-                    source={require("./assets/basket_icon.png")}
-                    style={styles.icon}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              </View>
-            </ImageBackground>
+            {searchResults.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.itemBackground}
+                onPress={() => {
+                  setSelectedProduct(item);
+                  setShowQuantityModal(true);
+                }}
+              >
+                <Image
+                  source={{ uri: item.item_image }}
+                  style={styles.itemImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.itemName}>{item.item_name}</Text>
+                <Text style={styles.itemPrice}>₱{item.Price}</Text>
+                <Text style={styles.storeName}>{item.vendor_username}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         ) : showStores ? (
           <View style={styles.storeList}>
@@ -541,7 +564,7 @@ const styles = StyleSheet.create({
     padding: 5,
     backgroundColor: "#800000",
     position: "absolute",
-    top: 138,
+    top: 120,
     left: 0,
     right: 0,
     zIndex: 1,
@@ -841,8 +864,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   productImage: {
-    width: 150,
-    height: 150,
+    width: 450,
+    height: 250,
     borderRadius: 75,
     overflow: "hidden",
     marginBottom: 10,

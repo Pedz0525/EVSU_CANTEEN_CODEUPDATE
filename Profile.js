@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { CommonActions } from "@react-navigation/native";
 
 const Profile = ({ navigation, route }) => {
   const { username: initialUsername } = route.params;
@@ -33,8 +34,22 @@ const Profile = ({ navigation, route }) => {
     navigation.goBack();
   };
 
-  const handleLogout = () => {
-    navigation.replace("UserTypeSelection");
+  const handleLogout = async () => {
+    try {
+      // Clear any stored data
+      await AsyncStorage.clear();
+
+      // Reset navigation and redirect to UserTypeSelection
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "UserTypeSelection" }],
+        })
+      );
+    } catch (error) {
+      console.error("Error during logout:", error);
+      Alert.alert("Error", "Failed to logout. Please try again.");
+    }
   };
 
   const selectImage = async (useLibrary = false) => {
@@ -69,7 +84,7 @@ const Profile = ({ navigation, route }) => {
     try {
       console.log("Fetching profile image for username:", username);
       const response = await fetch(
-        `http://192.168.254.108:3000/customer/profile/${encodeURIComponent(
+        `http://192.168.0.106:3000/customer/profile/${encodeURIComponent(
           username
         )}`
       );
@@ -126,7 +141,7 @@ const Profile = ({ navigation, route }) => {
       console.log("Sending request with formData:", formData);
 
       const response = await fetch(
-        "http://192.168.254.108:3000/customer/profile/update",
+        "http://192.168.0.106:3000/customer/profile/update",
         {
           method: "POST",
           body: formData,
@@ -175,7 +190,7 @@ const Profile = ({ navigation, route }) => {
       }
 
       const response = await fetch(
-        `http://192.168.254.108:3000/orders/${username}`
+        `http://192.168.0.106:3000/orders/${username}`
       );
       const data = await response.json();
 

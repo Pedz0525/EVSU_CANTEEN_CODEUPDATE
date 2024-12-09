@@ -28,7 +28,7 @@ const VendorDashboard = ({ navigation }) => {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.113:3000/status");
+      const response = await fetch("http://192.168.254.108:3000/status");
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -44,7 +44,7 @@ const VendorDashboard = ({ navigation }) => {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch("http://192.168.254.113:3000/products");
+      const response = await fetch("http://192.168.254.108:3000/products");
       const data = await response.json();
       if (data.success) {
         setProducts(data.products);
@@ -97,7 +97,7 @@ const VendorDashboard = ({ navigation }) => {
       });
 
       // Change port to 3000 to match your server
-      const response = await fetch("http://192.168.254.113:3000/products", {
+      const response = await fetch("http://192.168.254.108:3000/products", {
         method: "POST",
         body: formData,
         headers: {
