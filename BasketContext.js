@@ -1,45 +1,43 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useState, useContext } from "react";
 
-const BasketContext = createContext();
+export const BasketContext = createContext();
 
 export const BasketProvider = ({ children }) => {
   const [basket, setBasket] = useState([]);
 
   const addToBasket = (item) => {
-    setBasket((currentBasket) => {
-      // Check if item already exists in basket by comparing item_name and vendor_username
-      const existingItemIndex = currentBasket.findIndex(
+    setBasket((prevBasket) => {
+      // Check if item already exists in basket (matching item_name, price, and vendor_username)
+      const existingItemIndex = prevBasket.findIndex(
         (basketItem) =>
           basketItem.item_name === item.item_name &&
+          basketItem.Price === item.Price &&
           basketItem.vendor_username === item.vendor_username
       );
 
-      if (existingItemIndex >= 0) {
-        // Update quantity if item exists
-        const updatedBasket = [...currentBasket];
+      if (existingItemIndex !== -1) {
+        // If item exists, update quantity
+        const updatedBasket = [...prevBasket];
+        const existingItem = updatedBasket[existingItemIndex];
         updatedBasket[existingItemIndex] = {
-          ...updatedBasket[existingItemIndex],
-          quantity:
-            parseInt(updatedBasket[existingItemIndex].quantity) +
-            parseInt(item.quantity),
+          ...existingItem,
+          quantity: parseInt(existingItem.quantity) + parseInt(item.quantity),
         };
         return updatedBasket;
-      }
-
-      // Add new item if it doesn't exist
-      return [
-        ...currentBasket,
-        {
+      } else {
+        // If item doesn't exist, add as new item with unique basketId
+        const itemWithKey = {
           ...item,
-          id: `${item.item_name}-${item.vendor_username}-${Date.now()}`, // Create unique ID
-        },
-      ];
+          basketId: `${item.item_name}-${item.vendor_username}-${Date.now()}`,
+        };
+        return [...prevBasket, itemWithKey];
+      }
     });
   };
 
   const removeFromBasket = (itemToRemove) => {
-    setBasket((currentBasket) =>
-      currentBasket.filter((item) => item.id !== itemToRemove.id)
+    setBasket((prevBasket) =>
+      prevBasket.filter((item) => item.basketId !== itemToRemove.basketId)
     );
   };
 
@@ -47,12 +45,16 @@ export const BasketProvider = ({ children }) => {
     setBasket([]);
   };
 
+  const value = {
+    basket: basket || [],
+    addToBasket,
+    removeFromBasket,
+    clearBasket,
+    setBasket,
+  };
+
   return (
-    <BasketContext.Provider
-      value={{ basket, addToBasket, removeFromBasket, clearBasket }}
-    >
-      {children}
-    </BasketContext.Provider>
+    <BasketContext.Provider value={value}>{children}</BasketContext.Provider>
   );
 };
 

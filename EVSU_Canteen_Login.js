@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_URL } from "./config";
 
 export default function EVSU_Canteen_Login({ navigation }) {
   const [username, setUsername] = useState("");
@@ -21,7 +22,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.0.106:3000/status");
+      const response = await fetch(`${API_URL}/status`);
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -46,7 +47,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
     setLoading(true);
     try {
       console.log("Attempting login...");
-      const response = await fetch("http://192.168.0.106:3000/login", {
+      const response = await fetch(`${API_URL}/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -11,6 +11,7 @@ import {
 import { useBasket } from "./BasketContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
+import { API_URL } from "./config";
 
 const Basket = () => {
   const navigation = useNavigation();
@@ -41,14 +42,34 @@ const Basket = () => {
       // Debug log for basket items
       console.log("Current basket:", basket);
 
-      // Group items by vendor
+      // Group items by vendor and combine similar items
       const itemsByVendor = basket.reduce((acc, item) => {
-        console.log("Processing basket item:", item); // Debug log
         const vendorId = item.vendor_username;
         if (!acc[vendorId]) {
           acc[vendorId] = [];
         }
-        acc[vendorId].push(item);
+
+        // Check if similar item already exists for this vendor
+        const existingItemIndex = acc[vendorId].findIndex(
+          (existingItem) =>
+            existingItem.item_name === item.item_name &&
+            existingItem.Price === item.Price &&
+            existingItem.vendor_username === item.vendor_username
+        );
+
+        if (existingItemIndex !== -1) {
+          // Combine quantities if item exists
+          acc[vendorId][existingItemIndex].quantity += item.quantity;
+        } else {
+          // Add new item if it doesn't exist
+          acc[vendorId].push({
+            id: item.id || item.item_id,
+            quantity: parseInt(item.quantity),
+            Price: parseFloat(item.Price),
+            vendor_username: item.vendor_username,
+            item_name: item.item_name,
+          });
+        }
         return acc;
       }, {});
 
@@ -62,32 +83,20 @@ const Basket = () => {
             0
           ),
           status: "pending",
-          items: items.map((item) => {
-            console.log("Processing item for order:", item); // Debug log
-            return {
-              id: item.id || item.item_id, // Try both possible ID fields
-              quantity: parseInt(item.quantity),
-              Price: parseFloat(item.Price),
-              vendor_username: item.vendor_username,
-              item_name: item.item_name, // Include item name for reference
-            };
-          }),
+          items: items,
         };
 
         console.log("Sending order data:", JSON.stringify(orderData, null, 2));
 
         try {
-          const response = await fetch(
-            "http://192.168.0.106:3000/orders/create",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-              },
-              body: JSON.stringify(orderData),
-            }
-          );
+          const response = await fetch(`${API_URL}/orders/create`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(orderData),
+          });
 
           console.log("Response status:", response.status);
           const responseText = await response.text();
@@ -156,7 +165,9 @@ const Basket = () => {
         <>
           <FlatList
             data={basket}
-            keyExtractor={(item) => String(item.id || Date.now())}
+            keyExtractor={(item) =>
+              item.basketId || String(Date.now() + Math.random())
+            }
             renderItem={({ item }) => (
               <View style={styles.itemContainer}>
                 <Image

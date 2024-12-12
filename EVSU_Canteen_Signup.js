@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
+import { API_URL } from "./config";
 
 export default function EVSU_Canteen_Signup({ navigation }) {
   const [name, setName] = useState("");
@@ -25,7 +26,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.110:3000/status");
+      const response = await fetch(`${API_URL}/status`);
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -46,6 +47,26 @@ export default function EVSU_Canteen_Signup({ navigation }) {
       return;
     }
 
+    // Validate email
+    const emailPattern = /^[a-zA-Z0-9._%+-]+@evsu\.edu\.ph$/;
+    if (!emailPattern.test(email)) {
+      Alert.alert("Error", "Email must be a valid @evsu.edu.ph address");
+      return;
+    }
+
+    // Validate password length
+    if (password.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters long");
+      return;
+    }
+
+    // Validate name (no numbers)
+    const namePattern = /^[a-zA-Z\s]+$/;
+    if (!namePattern.test(name)) {
+      Alert.alert("Error", "Name must not contain numbers");
+      return;
+    }
+
     if (password !== confirmPassword) {
       Alert.alert("Error", "Passwords do not match");
       return;
@@ -53,7 +74,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch("http://192.168.254.110:3000/signup", {
+      const response = await fetch(`${API_URL}/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

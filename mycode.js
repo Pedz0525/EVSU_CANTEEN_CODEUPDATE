@@ -15,7 +15,6 @@ import { useBasket } from "./BasketContext";
 import FloatingBasket from "./FloatingBasket";
 import heartIcon from "./assets/red_heart.png";
 import { API_URL } from "./config";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const EVSU_Student_DashBoard = ({ navigation, route }) => {
   const { username } = route.params;
@@ -204,64 +203,6 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
     // Implement payment logic here
   };
 
-  const insertFavorite = async (item) => {
-    try {
-      if (!username) {
-        Alert.alert("Error", "Please login first");
-        return;
-      }
-
-      const favoriteData = {
-        customer_id: username,
-        vendor_id: item.vendor_username,
-        item_name: item.item_name,
-        vendor_username: item.vendor_username,
-        Price: item.Price,
-      };
-
-      console.log(
-        "Sending favorite data:",
-        JSON.stringify(favoriteData, null, 2)
-      );
-
-      try {
-        const response = await fetch(`${API_URL}/favorites/create`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(favoriteData),
-        });
-
-        const result = await response.json();
-        console.log("Server response:", result);
-
-        if (result.success) {
-          Alert.alert("Success", "Item added to favorites!");
-        } else {
-          // Check if the error is because item is already in favorites
-          if (result.message === "Item is already in favorites") {
-            Alert.alert("Info", "This item is already in your favorites!");
-          } else {
-            throw new Error(result.message || "Failed to add to favorites");
-          }
-        }
-      } catch (fetchError) {
-        console.error("Fetch error:", fetchError);
-        throw new Error(`Failed to add to favorites: ${fetchError.message}`);
-      }
-    } catch (error) {
-      console.error("Favorite submission error:", error);
-      Alert.alert(
-        "Error",
-        error.message || "An error occurred while adding to favorites."
-      );
-    } finally {
-      setShowFavoriteModal(false);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -329,7 +270,6 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
                   <TouchableOpacity
                     style={styles.heartIconButton}
                     onPress={() => {
-                      console.log("Heart icon pressed for item:", item); // Debug log
                       setSelectedFavoriteItem(item);
                       setShowFavoriteModal(true);
                     }}
@@ -421,7 +361,6 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
                   <TouchableOpacity
                     style={styles.heartIconButton}
                     onPress={() => {
-                      console.log("Heart icon pressed for item:", product); // Debug log
                       setSelectedFavoriteItem(product);
                       setShowFavoriteModal(true);
                     }}
@@ -656,24 +595,32 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
         onRequestClose={() => setShowFavoriteModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.confirmModalContent}>
-            <Text style={styles.confirmModalTitle}>Add to Favorites?</Text>
-            <View style={styles.confirmModalButtons}>
+          <View style={styles.favoriteModalContent}>
+            <Text style={styles.favoriteModalTitle}>Add to Favorites?</Text>
+            <View style={styles.favoriteModalButtons}>
               <TouchableOpacity
-                style={[styles.confirmModalButton, styles.noButton]}
+                style={[
+                  styles.favoriteModalButton,
+                  styles.favoriteModalButtonNo,
+                ]}
                 onPress={() => setShowFavoriteModal(false)}
               >
-                <Text style={styles.confirmModalButtonText}>No</Text>
+                <Text style={styles.favoriteModalButtonText}>No</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmModalButton, styles.yesButton]}
+                style={[
+                  styles.favoriteModalButton,
+                  styles.favoriteModalButtonYes,
+                ]}
                 onPress={() => {
-                  if (selectedFavoriteItem) {
-                    insertFavorite(selectedFavoriteItem);
-                  }
+                  console.log(
+                    "Added to favorites:",
+                    selectedFavoriteItem?.item_name
+                  );
+                  setShowFavoriteModal(false);
                 }}
               >
-                <Text style={styles.confirmModalButtonText}>Yes</Text>
+                <Text style={styles.favoriteModalButtonText}>Yes</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1266,39 +1213,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  confirmModalContent: {
+  favoriteModalContent: {
     backgroundColor: "white",
-    padding: 20,
     borderRadius: 10,
+    padding: 20,
     width: "80%",
     alignItems: "center",
   },
-  confirmModalTitle: {
+  favoriteModalTitle: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 20,
     color: "#800000",
   },
-  confirmModalButtons: {
+  favoriteModalButtons: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     width: "100%",
   },
-  confirmModalButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 30,
+  favoriteModalButton: {
+    flex: 1,
+    padding: 10,
     borderRadius: 5,
-    marginHorizontal: 10,
+    marginHorizontal: 5,
   },
-  noButton: {
-    backgroundColor: "#ccc",
+  favoriteModalButtonNo: {
+    backgroundColor: "#666",
   },
-  yesButton: {
+  favoriteModalButtonYes: {
     backgroundColor: "#800000",
   },
-  confirmModalButtonText: {
+  favoriteModalButtonText: {
     color: "white",
-    fontSize: 16,
+    textAlign: "center",
     fontWeight: "bold",
   },
 });

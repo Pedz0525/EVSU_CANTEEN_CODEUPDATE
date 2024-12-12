@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,14 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CommonActions } from "@react-navigation/native";
+import { API_URL } from "./config";
+import { useBasket } from "./BasketContext";
+import { BasketContext } from "./BasketContext";
 
 const Profile = ({ navigation, route }) => {
   const { username: initialUsername } = route.params;
@@ -25,6 +29,17 @@ const Profile = ({ navigation, route }) => {
   const [showOrdersModal, setShowOrdersModal] = useState(false);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const { addToBasket } = useBasket();
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [quantity, setQuantity] = useState("1");
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const { clearBasket } = useContext(BasketContext);
 
   const handleAccountSettings = () => {
     setShowEditProfile(true);
@@ -36,19 +51,24 @@ const Profile = ({ navigation, route }) => {
 
   const handleLogout = async () => {
     try {
-      // Clear any stored data
-      await AsyncStorage.clear();
+      // Clear the basket
+      clearBasket();
 
-      // Reset navigation and redirect to UserTypeSelection
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: "UserTypeSelection" }],
-        })
-      );
+      // Clear AsyncStorage
+      await AsyncStorage.multiRemove([
+        "username",
+        "userType",
+        // Add any other keys you want to clear
+      ]);
+
+      // Navigate to Login
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Login" }],
+      });
     } catch (error) {
-      console.error("Error during logout:", error);
-      Alert.alert("Error", "Failed to logout. Please try again.");
+      console.error("Logout error:", error);
+      Alert.alert("Error", "Failed to logout");
     }
   };
 
@@ -84,9 +104,7 @@ const Profile = ({ navigation, route }) => {
     try {
       console.log("Fetching profile image for username:", username);
       const response = await fetch(
-        `http://192.168.0.106:3000/customer/profile/${encodeURIComponent(
-          username
-        )}`
+        `${API_URL}/customer/profile/${encodeURIComponent(username)}`
       );
 
       if (!response.ok) {
@@ -118,7 +136,6 @@ const Profile = ({ navigation, route }) => {
       setIsLoading(true);
       console.log("Starting profile update...");
 
-      // Create FormData object
       const formData = new FormData();
       formData.append("username", username);
 
@@ -128,49 +145,59 @@ const Profile = ({ navigation, route }) => {
 
       // Handle image
       if (profileImage && profileImage.uri) {
+        // Get the file extension
         const uriParts = profileImage.uri.split(".");
         const fileType = uriParts[uriParts.length - 1];
 
-        formData.append("profileImage", {
-          uri: profileImage.uri,
-          name: `profile.${fileType}`,
+        // Create file name
+        const fileName = `profile_${Date.now()}.${fileType}`;
+
+        // Create file object
+        const file = {
+          uri:
+            Platform.OS === "ios"
+              ? profileImage.uri.replace("file://", "")
+              : profileImage.uri,
           type: `image/${fileType}`,
-        });
+          name: fileName,
+        };
+
+        formData.append("profileImage", file);
+
+        console.log("Appending image:", file);
       }
 
-      console.log("Sending request with formData:", formData);
+      console.log("FormData prepared:", formData);
 
-      const response = await fetch(
-        "http://192.168.0.106:3000/customer/profile/update",
-        {
-          method: "POST",
-          body: formData,
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      const response = await fetch(`${API_URL}/customer/profile/update`, {
+        method: "POST",
+        body: formData,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
       console.log("Profile update response:", data);
 
       if (data.success) {
-        Alert.alert("Success", "Profile updated successfully", [
-          {
-            text: "OK",
-            onPress: () => {
-              setShowEditProfile(false);
-              fetchProfileImage(); // Refresh the profile image
-            },
-          },
-        ]);
+        Alert.alert("Success", "Profile updated successfully");
+        setShowEditProfile(false);
+        fetchProfileImage(); // Refresh the profile image
       } else {
         Alert.alert("Error", data.message || "Failed to update profile");
       }
     } catch (error) {
-      console.error("Error updating profile details:", error);
-      Alert.alert("Error", "Failed to update profile. Please try again.");
+      console.error("Error updating profile:", error);
+      Alert.alert(
+        "Error",
+        "Failed to update profile. Please check your connection and try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -189,9 +216,7 @@ const Profile = ({ navigation, route }) => {
         return;
       }
 
-      const response = await fetch(
-        `http://192.168.0.106:3000/orders/${username}`
-      );
+      const response = await fetch(`${API_URL}/orders/${username}`);
       const data = await response.json();
 
       if (data.success) {
@@ -250,7 +275,169 @@ const Profile = ({ navigation, route }) => {
       </View>
 
       <View style={styles.totalContainer}>
-        <Text style={styles.totalText}>Total Amount: ₱{item.total_price}</Text>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalText}>
+            Total Amount: ₱{item.total_price}
+          </Text>
+          {item.status.toLowerCase() === "pending" && (
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => handleCancelOrder(item.order_id)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel Order</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
+  const fetchFavorites = async (page = 1) => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `${API_URL}/favorites/${username}?page=${page}`
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        if (page === 1) {
+          setFavorites(data.favorites);
+        } else {
+          setFavorites((prev) => [...prev, ...data.favorites]);
+        }
+        setHasMore(data.pagination.hasMore);
+        setCurrentPage(data.pagination.currentPage);
+      } else {
+        Alert.alert("Error", data.message || "Failed to fetch favorites");
+      }
+    } catch (error) {
+      console.error("Error fetching favorites:", error);
+      Alert.alert("Error", "Failed to fetch favorites");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (!loading && hasMore) {
+      fetchFavorites(currentPage + 1);
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setCurrentPage(1);
+    fetchFavorites(1);
+  };
+
+  const handleAddToBasket = (item) => {
+    console.log("Selected item for basket:", item);
+    setSelectedItem({
+      id: item.item_id,
+      item_name: item.item_name,
+      Price: item.Price,
+      item_image: item.item_image,
+      vendor_username: item.vendor_username,
+      Category: item.Category,
+    });
+    setShowQuantityModal(true);
+  };
+
+  const confirmAddToBasket = () => {
+    if (selectedItem) {
+      const basketItem = {
+        id: selectedItem.id,
+        item_name: selectedItem.item_name,
+        Price: selectedItem.Price,
+        item_image: selectedItem.item_image,
+        quantity: parseInt(quantity),
+        vendor_username: selectedItem.vendor_username,
+        Category: selectedItem.Category,
+      };
+
+      console.log("Adding to basket:", basketItem);
+      addToBasket(basketItem);
+      setShowQuantityModal(false);
+      setSelectedItem(null);
+      setQuantity("1");
+      Alert.alert("Success", "Item added to basket!");
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    try {
+      // Show confirmation dialog
+      Alert.alert(
+        "Cancel Order",
+        "Are you sure you want to cancel this order?",
+        [
+          {
+            text: "No",
+            style: "cancel",
+          },
+          {
+            text: "Yes",
+            onPress: async () => {
+              const response = await fetch(
+                `${API_URL}/orders/cancel/${orderId}`,
+                {
+                  method: "PUT",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+
+              const data = await response.json();
+
+              if (data.success) {
+                Alert.alert("Success", "Order cancelled successfully");
+                // Refresh orders list
+                fetchOrders();
+              } else {
+                Alert.alert("Error", data.message || "Failed to cancel order");
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error cancelling order:", error);
+      Alert.alert("Error", "Failed to cancel order");
+    }
+  };
+
+  const renderItem = ({ item }) => (
+    <View style={styles.favoriteCard}>
+      <Image
+        source={
+          item.item_image
+            ? { uri: item.item_image }
+            : require("./assets/placeholder.png")
+        }
+        style={styles.favoriteImage}
+        defaultSource={require("./assets/placeholder.png")}
+        onError={(e) => {
+          console.log("Image loading error:", e.nativeEvent.error);
+          console.log("Failed image:", item.item_name);
+        }}
+      />
+      <View style={styles.favoriteDetails}>
+        <Text style={styles.itemName} numberOfLines={1}>
+          {item.item_name}
+        </Text>
+        <Text style={styles.vendorName} numberOfLines={1}>
+          Vendor: {item.vendor_username}
+        </Text>
+        <Text style={styles.price}>₱{item.Price}</Text>
+        <TouchableOpacity
+          style={styles.addToBasketButton}
+          onPress={() => handleAddToBasket(item)}
+        >
+          <Text style={styles.addToBasketButtonText}>Add to Basket</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -286,13 +473,19 @@ const Profile = ({ navigation, route }) => {
             />
             <Text style={styles.iconText}>Basket</Text>
           </View> */}
-          <View style={styles.iconWrapper}>
+          <TouchableOpacity
+            style={styles.iconWrapper}
+            onPress={() => {
+              setShowFavoritesModal(true);
+              fetchFavorites();
+            }}
+          >
             <Image
               source={require("./assets/icons8-star-30.png")}
               style={styles.icon}
             />
             <Text style={styles.iconText}>Favorites</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.menuContainer}>
@@ -400,12 +593,156 @@ const Profile = ({ navigation, route }) => {
                 <FlatList
                   data={orders}
                   renderItem={renderOrderItem}
-                  keyExtractor={(item) => item.order_id.toString()}
+                  keyExtractor={(item, index) => `${item.order_id}-${index}`}
                   contentContainerStyle={styles.ordersList}
                 />
               ) : (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>No orders found</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showFavoritesModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowFavoritesModal(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>My Favorites</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => {
+                    console.log("Close button pressed");
+                    setShowFavoritesModal(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Image
+                    source={require("./assets/icons8-close-30.png")}
+                    style={styles.closeIcon}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {loadingFavorites ? (
+                <ActivityIndicator size="large" color="#800000" />
+              ) : favorites.length > 0 ? (
+                <>
+                  <FlatList
+                    data={favorites}
+                    keyExtractor={(item, index) =>
+                      `${item.favorite_id}-${index}`
+                    }
+                    renderItem={renderItem}
+                    contentContainerStyle={styles.favoritesList}
+                    ListEmptyComponent={() => (
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No favorites found</Text>
+                      </View>
+                    )}
+                    onEndReached={handleLoadMore}
+                    onEndReachedThreshold={0.5}
+                    refreshing={refreshing}
+                    onRefresh={handleRefresh}
+                    ListFooterComponent={() =>
+                      loading && hasMore ? (
+                        <ActivityIndicator
+                          size="large"
+                          color="#800000"
+                          style={styles.loader}
+                        />
+                      ) : null
+                    }
+                  />
+
+                  {/* Quantity Modal */}
+                  <Modal
+                    visible={showQuantityModal}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setShowQuantityModal(false)}
+                  >
+                    <View style={styles.modalOverlay}>
+                      <View style={styles.quantityModalContent}>
+                        <Text style={styles.quantityModalTitle}>
+                          Select Quantity
+                        </Text>
+
+                        <View style={styles.quantityContainer}>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => {
+                              const newQuantity = Math.max(
+                                1,
+                                parseInt(quantity) - 1
+                              );
+                              setQuantity(newQuantity.toString());
+                            }}
+                          >
+                            <Text style={styles.quantityButtonText}>-</Text>
+                          </TouchableOpacity>
+
+                          <TextInput
+                            style={styles.quantityInput}
+                            value={quantity}
+                            onChangeText={(text) => {
+                              const newQuantity = text.replace(/[^0-9]/g, "");
+                              if (
+                                newQuantity === "" ||
+                                parseInt(newQuantity) > 0
+                              ) {
+                                setQuantity(newQuantity);
+                              }
+                            }}
+                            keyboardType="numeric"
+                            maxLength={2}
+                          />
+
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => {
+                              const newQuantity = parseInt(quantity) + 1;
+                              setQuantity(newQuantity.toString());
+                            }}
+                          >
+                            <Text style={styles.quantityButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.modalButtons}>
+                          <TouchableOpacity
+                            style={[styles.modalButton, styles.cancelButton]}
+                            onPress={() => {
+                              setShowQuantityModal(false);
+                              setSelectedItem(null);
+                              setQuantity("1");
+                            }}
+                          >
+                            <Text style={styles.cancelButtonText}>Cancel</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.modalButton, styles.confirmButton]}
+                            onPress={confirmAddToBasket}
+                          >
+                            <Text style={styles.confirmButtonText}>
+                              Add to Basket
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  </Modal>
+                </>
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No favorites found</Text>
                 </View>
               )}
             </View>
@@ -591,10 +928,12 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 10,
+    zIndex: 1,
   },
   closeButtonText: {
+    color: "#fff",
     fontSize: 24,
-    color: "#800000",
+    fontWeight: "bold",
   },
   ordersList: {
     paddingBottom: 20,
@@ -665,6 +1004,33 @@ const styles = StyleSheet.create({
     marginTop: 10,
     alignItems: "flex-end",
   },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+  },
+  cancelButton: {
+    backgroundColor: "#FF0000",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    marginLeft: 10,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  cancelButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
   totalText: {
     fontSize: 18,
     fontWeight: "bold",
@@ -683,20 +1049,157 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    backgroundColor: "#800000",
+    padding: 15,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   modalTitle: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#800000",
+    color: "white",
   },
   closeIcon: {
     width: 24,
     height: 24,
-    tintColor: "#800000",
+    tintColor: "#fff",
+  },
+  favoriteCard: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    padding: 15,
+    marginBottom: 10,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  favoriteImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    marginRight: 15,
+    backgroundColor: "#f0f0f0",
+    resizeMode: "cover",
+  },
+  favoriteDetails: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 5,
+    flex: 1,
+  },
+  vendorName: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 5,
+  },
+  price: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#800000",
+    marginBottom: 5,
+  },
+  favoritesList: {
+    padding: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quantityModalContent: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 10,
+    width: "80%",
+    alignItems: "center",
+  },
+  quantityModalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#800000",
+  },
+  quantityContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  quantityButton: {
+    backgroundColor: "#800000",
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 20,
+  },
+  quantityButtonText: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  quantityInput: {
+    borderWidth: 1,
+    borderColor: "#800000",
+    borderRadius: 5,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    marginHorizontal: 10,
+    width: 50,
+    textAlign: "center",
+    fontSize: 16,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  modalButton: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: "#ccc",
+  },
+  confirmButton: {
+    backgroundColor: "#800000",
+  },
+  cancelButtonText: {
+    color: "#333",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  confirmButtonText: {
+    color: "white",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  addToBasketButton: {
+    backgroundColor: "#800000",
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
+    alignItems: "center",
+  },
+  addToBasketButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  loader: {
+    marginVertical: 20,
   },
 });
 

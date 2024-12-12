@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ImageBackground,
 } from "react-native";
+import { API_URL } from "./config";
 
 const ResetPassword = ({ route, navigation }) => {
   const { email } = route.params;
@@ -20,7 +21,7 @@ const ResetPassword = ({ route, navigation }) => {
   const checkConnection = async () => {
     try {
       console.log("Checking connection...");
-      const response = await fetch("http://192.168.254.108:3000/status");
+      const response = await fetch(`${API_URL}/status`);
       const data = await response.json();
       console.log("Connection response:", data);
       setConnectionStatus("Connected to server ✅");
@@ -47,19 +48,16 @@ const ResetPassword = ({ route, navigation }) => {
     }
 
     try {
-      const response = await fetch(
-        "http://192.168.254.108:3000/reset-password",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: email,
-            newPassword: newPassword,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          newPassword: newPassword,
+        }),
+      });
 
       const data = await response.json();
 

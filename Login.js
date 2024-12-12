@@ -1,9 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_URL } from "./config";
 
 // In your login function
 const handleLogin = async () => {
   try {
-    const response = await fetch("http://192.168.254.108:3000/login", {
+    const response = await fetch(`${API_URL}/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -17,12 +18,11 @@ const handleLogin = async () => {
     const data = await response.json();
 
     if (data.success) {
-      // Store both username and student_id
-      await AsyncStorage.setItem("username", data.username);
-      await AsyncStorage.setItem("student_id", String(data.student_id));
-
+      console.log("Storing student_id:", data.student_id); // Debugging log
+      await AsyncStorage.setItem("name", data.name);
+      await AsyncStorage.setItem("student_id", String(data.student_id)); // Ensure this is correct
       navigation.replace("EVSU_Student_DashBoard", {
-        username: data.username,
+        name: data.name,
       });
     } else {
       Alert.alert("Error", data.message);

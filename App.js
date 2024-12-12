@@ -20,7 +20,7 @@ export default function App() {
   return (
     <BasketProvider>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="Login">
+        <Stack.Navigator initialRouteName="UserTypeSelection">
           <Stack.Screen
             name="Login"
             component={EVSU_Canteen_Login}

@@ -13,7 +13,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 
 const FloatingBasket = () => {
   const navigation = useNavigation();
-  const { basket } = useBasket();
+  const { basket = [] } = useBasket();
 
   // Initialize position state
   const [pan] = useState(new Animated.ValueXY());
@@ -33,7 +33,6 @@ const FloatingBasket = () => {
     }),
     onPanResponderRelease: (e, gesture) => {
       pan.flattenOffset();
-      // Save the last position
       setLastPosition({
         x: pan.x._value,
         y: pan.y._value,
@@ -50,6 +49,8 @@ const FloatingBasket = () => {
     },
   });
 
+  const basketCount = basket?.length || 0;
+
   return (
     <Animated.View
       style={[
@@ -62,9 +63,9 @@ const FloatingBasket = () => {
     >
       <View style={styles.basketContainer}>
         <Icon name="shopping-basket" size={24} color="white" />
-        {basket.length > 0 && (
+        {basketCount > 0 && (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{basket.length}</Text>
+            <Text style={styles.badgeText}>{basketCount}</Text>
           </View>
         )}
       </View>

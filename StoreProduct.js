@@ -14,11 +14,13 @@ import {
 import { useBasket } from "./BasketContext";
 import FloatingBasket from "./FloatingBasket";
 import { useNavigation } from "@react-navigation/native";
+import { API_URL } from "./config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function StoreProduct({ route }) {
   const navigation = useNavigation();
   const { storeName, storeLocation } = route.params;
-  const [activeTab, setActiveTab] = useState("SHOP");
+  const [activeTab, setActiveTab] = useState("PRODUCTS");
   const [products, setProducts] = useState([]);
   const [categoryProducts, setCategoryProducts] = useState([]);
   const [isModalVisible, setModalVisible] = useState(false);
@@ -26,35 +28,37 @@ export default function StoreProduct({ route }) {
   const [showQuantityModal, setShowQuantityModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [showFavoriteModal, setShowFavoriteModal] = useState(false);
+  const [selectedFavoriteItem, setSelectedFavoriteItem] = useState(null);
+  const [showFavoriteConfirmModal, setShowFavoriteConfirmModal] =
+    useState(false);
 
   useEffect(() => {
     if (activeTab === "PRODUCTS") {
       const fetchProducts = async () => {
         try {
-          console.log("Current store/vendor:", storeName);
-
           const response = await fetch(
-            `http://192.168.254.110:3000/items/${encodeURIComponent(storeName)}`
+            `${API_URL}/items/${encodeURIComponent(storeName)}`
           );
-          console.log("Fetching items for vendor:", storeName);
-
           const data = await response.json();
-          if (data.success) {
-            console.log("Items received:", data.products);
 
-            // Log the first item to verify structure
+          if (data.success) {
+            // Log the first product to verify the structure
             if (data.products.length > 0) {
-              console.log("Sample item:", {
-                name: data.products[0].item_name,
-                price: data.products[0].Price,
-                category: data.products[0].Category,
+              console.log("Sample product:", {
+                item_name: data.products[0].item_name,
+                Price: data.products[0].Price,
+                vendor_username: data.products[0].vendor_username || storeName,
               });
             }
-
-            setProducts(data.products);
-            console.log("Total items fetched:", data.products.length);
+            setProducts(
+              data.products.map((product) => ({
+                ...product,
+                vendor_username: product.vendor_username || storeName, // Ensure vendor_username is set
+              }))
+            );
           } else {
-            console.error("Failed to fetch items:", data.message);
+            console.error("Failed to fetch products:", data.message);
           }
         } catch (error) {
           console.error("Error fetching items:", error);
@@ -71,7 +75,7 @@ export default function StoreProduct({ route }) {
       const encodedCategory = encodeURIComponent(category);
 
       const response = await fetch(
-        `http://192.168.254.110:3000/categories/${encodedStoreName}?category=${encodedCategory}`
+        `${API_URL}/categories/${encodedStoreName}?category=${encodedCategory}`
       );
 
       console.log("Fetching from:", {
@@ -85,9 +89,18 @@ export default function StoreProduct({ route }) {
       if (data.success) {
         // Log the first product to verify the structure
         if (data.products.length > 0) {
-          console.log("Sample product:", data.products[0]);
+          console.log("Sample category product:", {
+            item_name: data.products[0].item_name,
+            Price: data.products[0].Price,
+            vendor_username: data.products[0].vendor_username || storeName,
+          });
         }
-        setCategoryProducts(data.products);
+        setCategoryProducts(
+          data.products.map((product) => ({
+            ...product,
+            vendor_username: product.vendor_username || storeName, // Ensure vendor_username is set
+          }))
+        );
         setModalVisible(true);
       } else {
         console.error("Failed to fetch category products:", data.message);
@@ -111,16 +124,17 @@ export default function StoreProduct({ route }) {
 
   const handleAddToBasket = (product) => {
     const itemWithQuantity = {
-      id: String(Date.now()),
+      id: product.item_id || String(Date.now()),
       item_name: product.item_name,
       Price: product.Price,
       item_image: product.item_image,
       quantity: quantity,
-      vendor_username: product.vendor_username,
+      vendor_username: product.vendor_username || storeName, // Use product's vendor_username or storeName
+      Category: product.Category,
     };
 
+    console.log("Adding to basket:", itemWithQuantity); // Debug log
     addToBasket(itemWithQuantity);
-    console.log("Current basket:", basket);
     setShowQuantityModal(false);
     setQuantity(1);
     Alert.alert("Success", "Item added to basket!");
@@ -128,6 +142,65 @@ export default function StoreProduct({ route }) {
 
   const handleBack = () => {
     navigation.goBack();
+  };
+
+  const handleAddToFavorites = (item) => {
+    setSelectedFavoriteItem(item);
+    setShowFavoriteConfirmModal(true);
+  };
+
+  const confirmAddToFavorites = async () => {
+    try {
+      const username = await AsyncStorage.getItem("username");
+      if (!username) {
+        Alert.alert("Error", "Please login first");
+        return;
+      }
+
+      const favoriteData = {
+        customer_id: username,
+        vendor_id: storeName,
+        item_name: selectedFavoriteItem.item_name,
+        vendor_username: storeName,
+        Price: selectedFavoriteItem.Price,
+      };
+
+      console.log(
+        "Sending favorite data:",
+        JSON.stringify(favoriteData, null, 2)
+      );
+
+      const response = await fetch(`${API_URL}/favorites/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(favoriteData),
+      });
+
+      const result = await response.json();
+      console.log("Server response:", result);
+
+      if (result.success) {
+        Alert.alert("Success", "Item added to favorites!");
+      } else {
+        // Check if the error is because item is already in favorites
+        if (result.message === "Item is already in favorites") {
+          Alert.alert("Info", "This item is already in your favorites!");
+        } else {
+          throw new Error(result.message || "Failed to add to favorites");
+        }
+      }
+    } catch (error) {
+      console.error("Favorite submission error:", error);
+      Alert.alert(
+        "Error",
+        error.message || "An error occurred while adding to favorites."
+      );
+    } finally {
+      setShowFavoriteConfirmModal(false);
+    }
   };
 
   return (
@@ -146,21 +219,8 @@ export default function StoreProduct({ route }) {
         <Text style={styles.storeLocation}>{storeLocation}</Text>
       </View>
 
-      {/* Semi-navigation bar */}
+      {/* Modified navigation bar */}
       <View style={styles.navBar}>
-        <TouchableOpacity
-          style={[styles.navItem, activeTab === "SHOP" && styles.activeNavItem]}
-          onPress={() => setActiveTab("SHOP")}
-        >
-          <Text
-            style={[
-              styles.navText,
-              activeTab === "SHOP" && styles.activeNavText,
-            ]}
-          >
-            SHOP
-          </Text>
-        </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.navItem,
@@ -197,7 +257,6 @@ export default function StoreProduct({ route }) {
 
       {/* Content based on active tab */}
       <View style={styles.content}>
-        {activeTab === "SHOP" && <Text>Displaying Shop...</Text>}
         {activeTab === "PRODUCTS" && (
           <ScrollView contentContainerStyle={styles.productsContainer}>
             {products.map((product, index) => (
@@ -208,6 +267,15 @@ export default function StoreProduct({ route }) {
                   }}
                   style={styles.productImage}
                 />
+                <TouchableOpacity
+                  style={styles.heartIconButton}
+                  onPress={() => handleAddToFavorites(product)}
+                >
+                  <Image
+                    source={require("./assets/red_heart.png")}
+                    style={styles.heartIcon}
+                  />
+                </TouchableOpacity>
                 <Text style={styles.productName}>{product.item_name}</Text>
                 <Text style={styles.productPrice}>₱{product.Price}</Text>
                 <TouchableOpacity
@@ -304,6 +372,15 @@ export default function StoreProduct({ route }) {
                     source={{ uri: product.item_image }}
                     style={styles.productImage}
                   />
+                  <TouchableOpacity
+                    style={styles.heartIconButton}
+                    onPress={() => handleAddToFavorites(product)}
+                  >
+                    <Image
+                      source={require("./assets/red_heart.png")}
+                      style={styles.heartIcon}
+                    />
+                  </TouchableOpacity>
                   <Text style={styles.productName}>{product.item_name}</Text>
                   <Text style={styles.productPrice}>₱{product.Price}</Text>
                   <Text style={styles.categoryText}>{product.Category}</Text>
@@ -392,6 +469,34 @@ export default function StoreProduct({ route }) {
                 onPress={() => handleAddToBasket(selectedProduct)}
               >
                 <Text style={styles.buttonText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add the Favorite Modal */}
+      <Modal
+        visible={showFavoriteConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFavoriteConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <Text style={styles.confirmModalTitle}>Add to Favorites?</Text>
+            <View style={styles.confirmModalButtons}>
+              <TouchableOpacity
+                style={[styles.confirmModalButton, styles.noButton]}
+                onPress={() => setShowFavoriteConfirmModal(false)}
+              >
+                <Text style={styles.confirmModalButtonText}>No</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmModalButton, styles.yesButton]}
+                onPress={confirmAddToFavorites}
+              >
+                <Text style={styles.confirmModalButtonText}>Yes</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -519,6 +624,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   modalHeader: {
+    width: "100%",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -565,7 +671,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 15,
     textAlign: "center",
-    color: "#800000",
+    color: "white",
   },
   productInfo: {
     marginBottom: 15,
@@ -644,5 +750,60 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     tintColor: "#fff", // Makes the icon white to match header text
+  },
+  heartIconButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    zIndex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    borderRadius: 15,
+    padding: 5,
+  },
+  heartIcon: {
+    width: 24,
+    height: 24,
+    tintColor: "#ff0000",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmModalContent: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 10,
+    width: "80%",
+    alignItems: "center",
+  },
+  confirmModalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#800000",
+  },
+  confirmModalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+  },
+  confirmModalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+    borderRadius: 5,
+    marginHorizontal: 10,
+  },
+  noButton: {
+    backgroundColor: "#ccc",
+  },
+  yesButton: {
+    backgroundColor: "#800000",
+  },
+  confirmModalButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });
