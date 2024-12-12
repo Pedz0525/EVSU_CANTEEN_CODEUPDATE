@@ -18,6 +18,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
   const [connectionStatus, setConnectionStatus] = useState(
     "Checking connection..."
   );
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const checkConnection = async () => {
     try {
@@ -63,7 +64,6 @@ export default function EVSU_Canteen_Login({ navigation }) {
       console.log("Login data:", data);
 
       if (data.success) {
-        // Store user data in AsyncStorage
         await AsyncStorage.setItem("username", data.name);
         await AsyncStorage.setItem("student_id", String(data.student_id));
 
@@ -92,6 +92,7 @@ export default function EVSU_Canteen_Login({ navigation }) {
       setLoading(false);
     }
   };
+
   return (
     <View style={styles.container}>
       <View style={styles.imageContainer}>
@@ -118,13 +119,28 @@ export default function EVSU_Canteen_Login({ navigation }) {
           </View>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password:</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your password"
+                secureTextEntry={!isPasswordVisible}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+              >
+                <Image
+                  source={
+                    isPasswordVisible
+                      ? require("./assets/eye2.png")
+                      : require("./assets/eye.png")
+                  }
+                  style={styles.eyeImage}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
           <TouchableOpacity style={styles.button} onPress={handleLogin}>
             <Text style={styles.buttonText}>SIGN IN</Text>
@@ -146,7 +162,6 @@ export default function EVSU_Canteen_Login({ navigation }) {
       </View>
     </View>
   );
-  return;
 }
 
 const styles = StyleSheet.create({
@@ -203,6 +218,22 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     borderRadius: 5,
     backgroundColor: "#fff",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  eyeIcon: {
+    position: "absolute",
+    right: 10,
+    height: 20,
+    width: 20,
+    justifyContent: "center",
+  },
+  eyeImage: {
+    height: 20,
+    width: 20,
+    tintColor: "#888",
   },
   button: {
     backgroundColor: "#ff4c4c",

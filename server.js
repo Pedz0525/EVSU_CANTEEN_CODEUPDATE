@@ -43,6 +43,8 @@ const db = mysql.createConnection({
   user: "root",
   password: "",
   database: "evsu_canteen",
+  connectTimeout: 60000, // Increase timeout to 60 seconds
+  maxPacketSize: 16777216, // Increase max packet size to 16MB
   typeCast: function (field, next) {
     if (field.type === "BLOB" || field.type === "MEDIUMBLOB") {
       return field.buffer();
@@ -51,6 +53,27 @@ const db = mysql.createConnection({
   },
   multipleStatements: true,
 });
+
+// Reconnection handler
+function handleDisconnect() {
+  db.connect((err) => {
+    if (err) {
+      console.error("Error connecting to database:", err);
+      setTimeout(handleDisconnect, 2000);
+    }
+  });
+
+  db.on("error", (err) => {
+    console.error("Database error:", err);
+    if (err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ECONNRESET") {
+      handleDisconnect();
+    } else {
+      throw err;
+    }
+  });
+}
+
+handleDisconnect();
 
 // Connect to MySQL
 db.connect((err) => {
@@ -831,7 +854,6 @@ app.post(
       console.log("Password received:", password ? "Yes" : "No");
       console.log("File received:", req.file ? "Yes" : "No");
 
-      // First get the current password if no new password is provided
       if (!password || password.trim() === "") {
         return res.status(400).json({
           success: false,
@@ -843,24 +865,46 @@ app.post(
       const hashedPassword = await bcrypt.hash(password, 10);
       console.log("Password hashed successfully");
 
+      // Prepare image data if provided
+      let imageBuffer = null;
+      if (req.file) {
+        // Optimize image before saving
+        imageBuffer = await sharp(req.file.buffer)
+          .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+      }
+
+      // Create a new connection for this operation
+      const updateConnection = mysql.createConnection({
+        host: "localhost",
+        user: "root",
+        password: "",
+        database: "evsu_canteen",
+        connectTimeout: 60000,
+        maxPacketSize: 16777216,
+      });
+
+      updateConnection.connect();
+
       let updateQuery = "UPDATE customers SET password = ?";
       let queryParams = [hashedPassword];
 
-      // If image is provided, add it to the query
-      if (req.file) {
+      if (imageBuffer) {
         updateQuery += ", profile_image = ?";
-        queryParams.push(req.file.buffer);
+        queryParams.push(imageBuffer);
       }
 
-      // Add WHERE clause
       updateQuery += " WHERE name = ?";
       queryParams.push(username);
 
       console.log("Executing query:", updateQuery);
       console.log("Number of parameters:", queryParams.length);
 
-      // Execute the update query
-      db.query(updateQuery, queryParams, (err, result) => {
+      updateConnection.query(updateQuery, queryParams, (err, result) => {
+        // Close the temporary connection
+        updateConnection.end();
+
         if (err) {
           console.error("Update error:", err);
           return res.status(500).json({
