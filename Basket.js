@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  Modal,
 } from "react-native";
 import { useBasket } from "./BasketContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -15,7 +16,10 @@ import { API_URL } from "./config";
 
 const Basket = () => {
   const navigation = useNavigation();
-  const { basket, clearBasket, removeFromBasket } = useBasket();
+  const { basket, clearBasket, removeFromBasket, updateQuantity } = useBasket();
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [tempQuantity, setTempQuantity] = useState("1");
 
   const calculateTotal = () => {
     return basket
@@ -150,6 +154,112 @@ const Basket = () => {
     navigation.goBack(); // This will return to the previous screen
   };
 
+  // Add quantity update handler
+  const handleUpdateQuantity = (item) => {
+    setSelectedItem(item);
+    setTempQuantity(item.quantity.toString());
+    setShowQuantityModal(true);
+  };
+
+  const confirmQuantityUpdate = () => {
+    if (selectedItem && parseInt(tempQuantity) > 0) {
+      updateQuantity(selectedItem.basketId, tempQuantity);
+      setShowQuantityModal(false);
+      setSelectedItem(null);
+    } else {
+      Alert.alert(
+        "Invalid Quantity",
+        "Please enter a valid quantity greater than 0"
+      );
+    }
+  };
+
+  // Update the renderItem to include quantity update button
+  const renderItem = ({ item }) => (
+    <View style={styles.itemContainer}>
+      <Image source={{ uri: item.item_image }} style={styles.itemImage} />
+      <View style={styles.itemDetails}>
+        <Text style={styles.itemName}>{item.item_name}</Text>
+        <Text style={styles.vendorName}>Vendor: {item.vendor_username}</Text>
+        <View style={styles.quantityContainer}>
+          <Text style={styles.itemPrice}>₱{item.Price}</Text>
+          <TouchableOpacity
+            style={styles.updateQuantityButton}
+            onPress={() => handleUpdateQuantity(item)}
+          >
+            <Text style={styles.quantityText}>Qty: {item.quantity}</Text>
+            <Text style={styles.editText}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.itemSubtotal}>
+          Subtotal: ₱{calculateItemTotal(item.Price, item.quantity)}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => handleRemoveItem(item)}
+      >
+        <Text style={styles.removeButtonText}>✕</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Add quantity modal component
+  const QuantityModal = () => (
+    <Modal visible={showQuantityModal} transparent={true} animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Update Quantity</Text>
+
+          <View style={styles.quantitySelector}>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => {
+                const currentQty = parseInt(tempQuantity);
+                if (currentQty > 1) {
+                  setTempQuantity((currentQty - 1).toString());
+                }
+              }}
+            >
+              <Text style={styles.quantityButtonText}>-</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.quantityText}>{tempQuantity}</Text>
+
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => {
+                const currentQty = parseInt(tempQuantity);
+                setTempQuantity((currentQty + 1).toString());
+              }}
+            >
+              <Text style={styles.quantityButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelButton]}
+              onPress={() => {
+                setShowQuantityModal(false);
+                setSelectedItem(null);
+              }}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButton, styles.confirmButton]}
+              onPress={confirmQuantityUpdate}
+            >
+              <Text style={styles.confirmButtonText}>Update</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -168,32 +278,7 @@ const Basket = () => {
             keyExtractor={(item) =>
               item.basketId || String(Date.now() + Math.random())
             }
-            renderItem={({ item }) => (
-              <View style={styles.itemContainer}>
-                <Image
-                  source={{ uri: item.item_image }}
-                  style={styles.itemImage}
-                />
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemName}>{item.item_name}</Text>
-                  <Text style={styles.vendorName}>
-                    Vendor: {item.vendor_username}
-                  </Text>
-                  <Text style={styles.itemPrice}>
-                    ₱{item.Price} x {item.quantity}
-                  </Text>
-                  <Text style={styles.itemSubtotal}>
-                    Subtotal: ₱{calculateItemTotal(item.Price, item.quantity)}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => handleRemoveItem(item)}
-                >
-                  <Text style={styles.removeButtonText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            renderItem={renderItem}
           />
           <View style={styles.totalContainer}>
             <Text style={styles.totalLabel}>Total Items: {basket.length}</Text>
@@ -213,6 +298,8 @@ const Basket = () => {
           <Text style={styles.emptyText}>Your basket is empty</Text>
         </View>
       )}
+
+      <QuantityModal />
     </View>
   );
 };
@@ -349,6 +436,108 @@ const styles = StyleSheet.create({
   removeButtonText: {
     color: "white",
     fontSize: 16,
+    fontWeight: "bold",
+  },
+  quantityContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginVertical: 5,
+  },
+
+  updateQuantityButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    padding: 5,
+    borderRadius: 5,
+  },
+
+  quantityText: {
+    marginRight: 5,
+    fontSize: 14,
+  },
+
+  editText: {
+    color: "#800000",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalContent: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 15,
+    width: "80%",
+    alignItems: "center",
+  },
+
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#800000",
+  },
+
+  quantitySelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 25,
+  },
+
+  quantityButton: {
+    backgroundColor: "#800000",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 20,
+  },
+
+  quantityButtonText: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 5,
+  },
+
+  cancelButton: {
+    backgroundColor: "#cccccc",
+  },
+
+  confirmButton: {
+    backgroundColor: "#800000",
+  },
+
+  cancelButtonText: {
+    color: "#333333",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+
+  confirmButtonText: {
+    color: "white",
+    textAlign: "center",
     fontWeight: "bold",
   },
 });

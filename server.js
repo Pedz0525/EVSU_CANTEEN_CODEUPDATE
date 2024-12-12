@@ -38,50 +38,22 @@ app.use((req, res, next) => {
 });
 
 // Create MySQL connection
-const db = mysql.createConnection({
+const db = mysql.createPool({
   host: "localhost",
   user: "root",
   password: "",
   database: "evsu_canteen",
-  connectTimeout: 60000, // Increase timeout to 60 seconds
-  maxPacketSize: 16777216, // Increase max packet size to 16MB
-  typeCast: function (field, next) {
-    if (field.type === "BLOB" || field.type === "MEDIUMBLOB") {
-      return field.buffer();
-    }
-    return next();
-  },
-  multipleStatements: true,
+  connectionLimit: 10,
 });
 
-// Reconnection handler
-function handleDisconnect() {
-  db.connect((err) => {
-    if (err) {
-      console.error("Error connecting to database:", err);
-      setTimeout(handleDisconnect, 2000);
-    }
-  });
-
-  db.on("error", (err) => {
-    console.error("Database error:", err);
-    if (err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ECONNRESET") {
-      handleDisconnect();
-    } else {
-      throw err;
-    }
-  });
-}
-
-handleDisconnect();
-
-// Connect to MySQL
-db.connect((err) => {
+// Test database connection
+db.getConnection((err, connection) => {
   if (err) {
     console.error("Error connecting to database:", err);
     return;
   }
-  console.log("Connected to MySQL database");
+  console.log("Successfully connected to database");
+  connection.release();
 });
 
 // Status endpoint
@@ -167,67 +139,72 @@ app.post("/login", async (req, res) => {
 });
 
 // Add this new endpoint
-app.post("/signup", async (req, res) => {
-  const { name, username, email, password } = req.body;
-
-  // Basic validation
-  if (!name || !username || !email || !password) {
-    return res.json({
-      success: false,
-      message: "Please provide all required fields",
-    });
-  }
-
+// Update the signup endpoint
+app.post("/signup", upload.single("profile_image"), async (req, res) => {
   try {
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const { name, username, email, password } = req.body;
+    const profile_image = req.file ? req.file.buffer : null;
 
-    // Check if username or email already exists
-    const checkQuery =
-      "SELECT * FROM customers WHERE username = ? OR email = ?";
-    db.query(checkQuery, [username, email], (checkErr, checkResults) => {
-      if (checkErr) {
-        console.error("Database check error:", checkErr);
+    // Check if username already exists
+    const checkUsername = "SELECT * FROM customers WHERE username = ?";
+    db.query(checkUsername, [username], (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
         return res.json({
           success: false,
           message: "Database error",
         });
       }
 
-      if (checkResults.length > 0) {
+      if (results.length > 0) {
         return res.json({
           success: false,
-          message: "Username or email already exists",
+          message: "Username already exists",
         });
       }
 
-      // Insert new user
-      const insertQuery =
-        "INSERT INTO customers (name, username, email, password) VALUES (?, ?, ?, ?)";
-      db.query(
-        insertQuery,
-        [name, username, email, hashedPassword],
-        (err, results) => {
-          if (err) {
-            console.error("Signup error:", err);
-            return res.json({
-              success: false,
-              message: "Failed to create account",
-            });
-          }
-
-          res.json({
-            success: true,
-            message: "User registered successfully",
+      // Hash password
+      bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
+        if (hashErr) {
+          console.error("Hash error:", hashErr);
+          return res.json({
+            success: false,
+            message: "Error hashing password",
           });
         }
-      );
+
+        // Insert new user with profile image
+        const insertUser = `
+          INSERT INTO customers 
+          (name, username, email, password, profile_image) 
+          VALUES (?, ?, ?, ?, ?)
+        `;
+
+        db.query(
+          insertUser,
+          [name, username, email, hashedPassword, profile_image],
+          (insertErr, result) => {
+            if (insertErr) {
+              console.error("Insert error:", insertErr);
+              return res.json({
+                success: false,
+                message: "Error creating account",
+              });
+            }
+
+            res.json({
+              success: true,
+              message: "Account created successfully",
+            });
+          }
+        );
+      });
     });
   } catch (error) {
-    console.error("Password hashing error:", error);
+    console.error("Server error:", error);
     res.json({
       success: false,
-      message: "Error creating account",
+      message: "Server error",
     });
   }
 });
@@ -516,6 +493,8 @@ app.get("/vendors", (req, res) => {
 //   });
 // });
 
+// ... existing code ...
+
 app.get("/items", (req, res) => {
   console.log("Fetching items...");
 
@@ -525,8 +504,10 @@ app.get("/items", (req, res) => {
       item_image, 
       Price, 
       vendor_username,
-      Category 
+      Category,
+      status 
     FROM items
+    WHERE status != 'Unavailable'
   `;
 
   db.query(query, (err, results) => {
@@ -548,18 +529,10 @@ app.get("/items", (req, res) => {
         Price: item.Price,
         vendor_username: item.vendor_username,
         Category: item.Category,
+        status: item.status,
       }));
 
       console.log("Items fetched successfully, count:", itemsWithImages.length);
-
-      // Log a sample item to verify the structure
-      if (itemsWithImages.length > 0) {
-        console.log("Sample item:", {
-          item_name: itemsWithImages[0].item_name,
-          Price: itemsWithImages[0].Price,
-          vendor_username: itemsWithImages[0].vendor_username,
-        });
-      }
 
       res.json({
         success: true,
@@ -575,6 +548,8 @@ app.get("/items", (req, res) => {
     }
   });
 });
+
+// ... existing code ...
 // Update multer configuration for mobile uploads
 
 app.post("/products", upload.single("ImageItem"), async (req, res) => {
@@ -686,64 +661,74 @@ app.post("/vendor_signup", async (req, res) => {
 });
 
 // Update this endpoint to fetch products by StoreName
-app.get("/products/:storeName", (req, res) => {
-  const { storeName } = req.params;
-  const { category } = req.query;
+// Update the products endpoint
+// app.get("/products/:storeName", (req, res) => {
+//   const { storeName } = req.params;
+//   const { category } = req.query;
 
-  // Log the received parameters
-  console.log("Fetching products for:", { storeName, category });
+//   console.log("Fetching products for:", { storeName, category });
 
-  let query =
-    "SELECT itemName, ImageItem, price, category FROM products WHERE StoreName = ?";
-  let queryParams = [storeName];
+//   let query = `
+//     SELECT
+//       item_name,
+//       item_image,
+//       Price,
+//       Category,
+//       vendor_username,
+//       status
+//     FROM items
+//     WHERE vendor_username = ?
+//     AND status != 'Unavailable'
+//   `;
 
-  if (category) {
-    // Use BINARY for exact case-sensitive matching
-    query += " AND BINARY category = ?";
-    queryParams.push(category);
-  }
+//   let queryParams = [storeName];
 
-  console.log("Executing query:", query, queryParams);
+//   if (category) {
+//     query += " AND BINARY Category = ?";
+//     queryParams.push(category);
+//   }
 
-  db.query(query, queryParams, (err, results) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.json({
-        success: false,
-        message: "Failed to fetch products",
-      });
-    }
+//   console.log("Executing query:", query, queryParams);
 
-    try {
-      const productsWithImages = results.map((product) => ({
-        ...product,
-        ImageItem: product.ImageItem
-          ? `data:image/jpeg;base64,${product.ImageItem.toString("base64")}`
-          : null,
-      }));
+//   db.query(query, queryParams, (err, results) => {
+//     if (err) {
+//       console.error("Database error:", err);
+//       return res.json({
+//         success: false,
+//         message: "Failed to fetch products",
+//       });
+//     }
 
-      console.log(`Found ${productsWithImages.length} products`);
-      console.log(
-        "Categories found:",
-        productsWithImages.map((p) => p.category)
-      );
+//     try {
+//       const productsWithImages = results.map((item) => ({
+//         item_name: item.item_name,
+//         item_image: item.item_image
+//           ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
+//           : null,
+//         Price: item.Price,
+//         Category: item.Category,
+//         vendor_username: item.vendor_username,
+//         status: item.status,
+//       }));
 
-      res.json({
-        success: true,
-        products: productsWithImages,
-      });
-    } catch (error) {
-      console.error("Error processing images:", error);
-      res.json({
-        success: false,
-        message: "Error processing images",
-        error: error.message,
-      });
-    }
-  });
-});
+//       console.log(`Found ${productsWithImages.length} products`);
 
-// New endpoint to fetch products by StoreName and Category
+//       res.json({
+//         success: true,
+//         products: productsWithImages,
+//       });
+//     } catch (error) {
+//       console.error("Error processing images:", error);
+//       res.json({
+//         success: false,
+//         message: "Error processing images",
+//         error: error.message,
+//       });
+//     }
+//   });
+// });
+
+// Update the categories endpoint
 app.get("/categories/:vendorUsername", (req, res) => {
   const { vendorUsername } = req.params;
   const { category } = req.query;
@@ -754,10 +739,17 @@ app.get("/categories/:vendorUsername", (req, res) => {
   });
 
   const query = `
-    SELECT item_name, item_image, Price, Category, vendor_username
+    SELECT 
+      item_name, 
+      item_image, 
+      Price, 
+      Category, 
+      vendor_username,
+      status
     FROM items 
     WHERE LOWER(vendor_username) = LOWER(?) 
     AND LOWER(Category) = LOWER(?)
+    AND status != 'Unavailable'
   `;
 
   console.log("Executing query with params:", [vendorUsername, category]);
@@ -781,6 +773,7 @@ app.get("/categories/:vendorUsername", (req, res) => {
         Price: item.Price,
         Category: item.Category,
         vendor_username: item.vendor_username,
+        status: item.status,
       }));
 
       console.log(
@@ -801,7 +794,6 @@ app.get("/categories/:vendorUsername", (req, res) => {
     }
   });
 });
-
 app.get("/customer/profile/:username", (req, res) => {
   const { username } = req.params;
   console.log("Fetching profile for username:", username);
@@ -1187,9 +1179,22 @@ app.get("/search", async (req, res) => {
     const { query } = req.query;
 
     const searchQuery = `
-      SELECT item_name, item_image, Price, vendor_username
+      SELECT 
+        item_id,
+        item_name, 
+        item_image, 
+        Price, 
+        vendor_username,
+        status
       FROM items
-      WHERE item_name LIKE ?
+      WHERE 
+        item_name LIKE ? 
+        AND status != 'Unavailable'
+      ORDER BY 
+        CASE 
+          WHEN status = 'Available' THEN 1
+          WHEN status = 'Out of Stock' THEN 2
+        END
     `;
 
     db.query(searchQuery, [`%${query}%`], (err, results) => {
@@ -1202,18 +1207,24 @@ app.get("/search", async (req, res) => {
       }
 
       try {
-        // Convert binary image data to base64
+        // Convert binary image data to base64 and include status
         const itemsWithImages = results.map((item) => ({
+          item_id: item.item_id,
           item_name: item.item_name,
           item_image: item.item_image
             ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
             : null,
           Price: item.Price,
           vendor_username: item.vendor_username,
+          status: item.status, // Include status in response
         }));
 
         console.log(
-          `Found ${itemsWithImages.length} items matching "${query}"`
+          `Found ${itemsWithImages.length} items matching "${query}"`,
+          itemsWithImages.map((item) => ({
+            name: item.item_name,
+            status: item.status,
+          }))
         );
 
         res.json({
@@ -1940,16 +1951,16 @@ app.post("/favorites/create", async (req, res) => {
   }
 });
 
+// Update the favorites endpoint
 app.get("/favorites/:username", async (req, res) => {
   try {
     const { username } = req.params;
     const page = parseInt(req.query.page) || 1;
-    const limit = 10; // Items per page
+    const limit = 10;
     const offset = (page - 1) * limit;
 
     console.log("Fetching favorites for username:", username);
 
-    // First get the customer_id
     const customerQuery = "SELECT customer_id FROM customers WHERE name = ?";
 
     db.query(customerQuery, [username], (customerErr, customerResult) => {
@@ -1962,11 +1973,12 @@ app.get("/favorites/:username", async (req, res) => {
 
       const customerId = customerResult[0].customer_id;
 
-      // Get total count of favorites
       const countQuery = `
         SELECT COUNT(*) as total
         FROM favorites f
-        WHERE f.customer_id = ?
+        JOIN items i ON f.item_id = i.item_id
+        WHERE f.customer_id = ? 
+        AND i.status != 'Unavailable'
       `;
 
       db.query(countQuery, [customerId], (countErr, countResult) => {
@@ -1980,7 +1992,6 @@ app.get("/favorites/:username", async (req, res) => {
         const totalItems = countResult[0].total;
         const totalPages = Math.ceil(totalItems / limit);
 
-        // Updated query to join with vendors table and get vendor_username with pagination
         const favoritesQuery = `
           SELECT 
             f.favorite_id,
@@ -1989,11 +2000,18 @@ app.get("/favorites/:username", async (req, res) => {
             i.Price,
             i.Category,
             i.item_image,
+            i.status,
             v.username as vendor_username
           FROM favorites f
           JOIN items i ON f.item_id = i.item_id
           JOIN vendors v ON i.vendor_username = v.username
           WHERE f.customer_id = ?
+          AND i.status != 'Unavailable'
+          ORDER BY 
+            CASE 
+              WHEN i.status = 'Available' THEN 1
+              WHEN i.status = 'Out of Stock' THEN 2
+            END
           LIMIT ? OFFSET ?
         `;
 
@@ -2018,12 +2036,21 @@ app.get("/favorites/:username", async (req, res) => {
                 Price: item.Price,
                 Category: item.Category,
                 vendor_username: item.vendor_username,
+                status: item.status,
                 item_image: item.item_image
                   ? `data:image/jpeg;base64,${item.item_image.toString(
                       "base64"
                     )}`
                   : null,
               }));
+
+              console.log(
+                "Favorites with status:",
+                favoritesWithImages.map((item) => ({
+                  name: item.item_name,
+                  status: item.status,
+                }))
+              );
 
               res.json({
                 success: true,
@@ -2060,20 +2087,19 @@ app.get("/favorites/:username", async (req, res) => {
 // Update the endpoint for fetching store items
 app.get("/items/:storeName", (req, res) => {
   const { storeName } = req.params;
-  console.log("Fetching items for store:", storeName);
 
   const query = `
     SELECT 
-      i.item_id,
-      i.item_name,
-      i.item_image,
-      i.Price,
-      i.Category,
-      i.vendor_username,
-      v.username as vendor_username
-    FROM items i
-    JOIN vendors v ON i.vendor_username = v.username
-    WHERE v.username = ?
+      item_id,
+      item_name,
+      item_image,
+      Price,
+      Category,
+      vendor_username,
+      status
+    FROM items 
+    WHERE vendor_username = ? 
+    AND status != 'Unavailable'
   `;
 
   db.query(query, [storeName], (err, results) => {
@@ -2090,15 +2116,22 @@ app.get("/items/:storeName", (req, res) => {
       const itemsWithImages = results.map((item) => ({
         item_id: item.item_id,
         item_name: item.item_name,
+        Price: item.Price,
+        Category: item.Category,
+        vendor_username: item.vendor_username,
+        status: item.status,
         item_image: item.item_image
           ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
           : null,
-        Price: item.Price,
-        vendor_username: item.vendor_username,
-        Category: item.Category,
       }));
 
-      console.log("Items fetched successfully, count:", itemsWithImages.length);
+      console.log(
+        "Items fetched with status:",
+        itemsWithImages.map((item) => ({
+          name: item.item_name,
+          status: item.status,
+        }))
+      );
 
       res.json({
         success: true,

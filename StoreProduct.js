@@ -123,20 +123,41 @@ export default function StoreProduct({ route }) {
   };
 
   const handleAddToBasket = (product) => {
+    console.log("Attempting to add product with status:", product.status); // Debug log
+
+    if (product.status === "Out of Stock") {
+      Alert.alert("Out of Stock", "This item is currently being restocked.");
+      return;
+    }
+
+    setSelectedProduct(product);
+    setQuantity(1);
+    setShowQuantityModal(true);
+  };
+
+  const confirmAddToBasket = () => {
+    if (!selectedProduct || selectedProduct.status === "Out of Stock") {
+      Alert.alert("Out of Stock", "This item is currently being restocked.");
+      setShowQuantityModal(false);
+      return;
+    }
+
     const itemWithQuantity = {
-      id: product.item_id || String(Date.now()),
-      item_name: product.item_name,
-      Price: product.Price,
-      item_image: product.item_image,
+      id: selectedProduct.item_id || String(Date.now()),
+      item_name: selectedProduct.item_name,
+      Price: selectedProduct.Price,
+      item_image: selectedProduct.item_image,
       quantity: quantity,
-      vendor_username: product.vendor_username || storeName, // Use product's vendor_username or storeName
-      Category: product.Category,
+      vendor_username: selectedProduct.vendor_username || storeName,
+      Category: selectedProduct.Category,
+      status: selectedProduct.status,
     };
 
-    console.log("Adding to basket:", itemWithQuantity); // Debug log
+    console.log("Adding to basket:", itemWithQuantity);
     addToBasket(itemWithQuantity);
     setShowQuantityModal(false);
     setQuantity(1);
+    setSelectedProduct(null);
     Alert.alert("Success", "Item added to basket!");
   };
 
@@ -259,36 +280,53 @@ export default function StoreProduct({ route }) {
       <View style={styles.content}>
         {activeTab === "PRODUCTS" && (
           <ScrollView contentContainerStyle={styles.productsContainer}>
-            {products.map((product, index) => (
-              <View key={index} style={styles.product}>
-                <Image
-                  source={{
-                    uri: product.item_image,
-                  }}
-                  style={styles.productImage}
-                />
-                <TouchableOpacity
-                  style={styles.heartIconButton}
-                  onPress={() => handleAddToFavorites(product)}
-                >
+            <View style={styles.productsGrid}>
+              {products.map((product, index) => (
+                <View key={index} style={styles.product}>
                   <Image
-                    source={require("./assets/red_heart.png")}
-                    style={styles.heartIcon}
+                    source={{
+                      uri: product.item_image,
+                    }}
+                    style={styles.productImage}
                   />
-                </TouchableOpacity>
-                <Text style={styles.productName}>{product.item_name}</Text>
-                <Text style={styles.productPrice}>₱{product.Price}</Text>
-                <TouchableOpacity
-                  style={styles.basketButton}
-                  onPress={() => {
-                    setSelectedProduct(product);
-                    setShowQuantityModal(true);
-                  }}
-                >
-                  <Text style={styles.basketButtonText}>Add to Basket</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+                  <TouchableOpacity
+                    style={styles.heartIconButton}
+                    onPress={() => handleAddToFavorites(product)}
+                  >
+                    <Image
+                      source={require("./assets/red_heart.png")}
+                      style={styles.heartIcon}
+                    />
+                  </TouchableOpacity>
+                  <Text style={styles.productName}>{product.item_name}</Text>
+                  <Text style={styles.productPrice}>₱{product.Price}</Text>
+                  {product.status === "Out of Stock" && (
+                    <Text style={styles.outOfStockText}>Out of Stock</Text>
+                  )}
+                  <TouchableOpacity
+                    style={[
+                      styles.basketButton,
+                      product.status === "Out of Stock" &&
+                        styles.basketButtonDisabled,
+                    ]}
+                    onPress={() => handleAddToBasket(product)}
+                    disabled={product.status === "Out of Stock"}
+                  >
+                    <Text
+                      style={[
+                        styles.basketButtonText,
+                        product.status === "Out of Stock" &&
+                          styles.basketButtonTextDisabled,
+                      ]}
+                    >
+                      {product.status === "Out of Stock"
+                        ? "Out of Stock"
+                        : "Add to Basket"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
           </ScrollView>
         )}
         {activeTab === "CATEGORIES" && (
@@ -384,14 +422,39 @@ export default function StoreProduct({ route }) {
                   <Text style={styles.productName}>{product.item_name}</Text>
                   <Text style={styles.productPrice}>₱{product.Price}</Text>
                   <Text style={styles.categoryText}>{product.Category}</Text>
+                  {product.status === "Out of Stock" && (
+                    <Text style={styles.outOfStockText}>Out of Stock</Text>
+                  )}
                   <TouchableOpacity
-                    style={styles.basketButton}
+                    style={[
+                      styles.basketButton,
+                      product.status === "Out of Stock" &&
+                        styles.basketButtonDisabled,
+                    ]}
                     onPress={() => {
+                      if (product.status === "Out of Stock") {
+                        Alert.alert(
+                          "Out of Stock",
+                          "This item is currently being restocked."
+                        );
+                        return;
+                      }
                       setSelectedProduct(product);
                       setShowQuantityModal(true);
                     }}
+                    disabled={product.status === "Out of Stock"}
                   >
-                    <Text style={styles.basketButtonText}>Add to Basket</Text>
+                    <Text
+                      style={[
+                        styles.basketButtonText,
+                        product.status === "Out of Stock" &&
+                          styles.basketButtonTextDisabled,
+                      ]}
+                    >
+                      {product.status === "Out of Stock"
+                        ? "Out of Stock"
+                        : "Add to Basket"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ))
@@ -407,73 +470,57 @@ export default function StoreProduct({ route }) {
       </Modal>
 
       {/* Quantity Modal */}
-      <Modal
-        visible={showQuantityModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          setShowQuantityModal(false);
-          setQuantity(1);
-        }}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Quantity</Text>
+      {showQuantityModal && (
+        <Modal
+          visible={showQuantityModal}
+          transparent={true}
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Select Quantity</Text>
 
-            {selectedProduct && (
-              <View style={styles.productInfo}>
-                <Text style={styles.productNameModal}>
-                  {selectedProduct.item_name}
-                </Text>
-                <Text style={styles.productPriceModal}>
-                  ₱{selectedProduct.Price}
-                </Text>
+              <View style={styles.quantitySelector}>
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => quantity > 1 && setQuantity(quantity - 1)}
+                >
+                  <Text style={styles.quantityButtonText}>-</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.quantityText}>{quantity}</Text>
+
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => setQuantity(quantity + 1)}
+                >
+                  <Text style={styles.quantityButtonText}>+</Text>
+                </TouchableOpacity>
               </View>
-            )}
 
-            <View style={styles.quantitySelector}>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => {
-                  if (quantity > 1) {
-                    setQuantity(quantity - 1);
-                  }
-                }}
-              >
-                <Text style={styles.quantityButtonText}>-</Text>
-              </TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setShowQuantityModal(false);
+                    setQuantity(1);
+                    setSelectedProduct(null);
+                  }}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
 
-              <Text style={styles.quantityText}>{quantity}</Text>
-
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => setQuantity(quantity + 1)}
-              >
-                <Text style={styles.quantityButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setShowQuantityModal(false);
-                  setQuantity(1);
-                }}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.addButton]}
-                onPress={() => handleAddToBasket(selectedProduct)}
-              >
-                <Text style={styles.buttonText}>Confirm</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.addButton]}
+                  onPress={confirmAddToBasket}
+                >
+                  <Text style={styles.buttonText}>Add to Basket</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* Add the Favorite Modal */}
       <Modal
@@ -516,7 +563,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   header: {
-    marginTop: 50,
+    paddingTop: 45,
     padding: 16,
     backgroundColor: "#800000",
     flexDirection: "row",
@@ -568,22 +615,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   productsContainer: {
+    paddingVertical: 20,
     paddingHorizontal: 16,
-    backgroundColor: "white",
+    alignItems: "center",
+  },
+  productsGrid: {
+    width: "100%",
     alignItems: "center",
   },
   product: {
-    marginBottom: 20,
-    alignItems: "center",
     width: "100%",
+    marginBottom: 20,
+    padding: 15,
     backgroundColor: "#fff",
-    padding: 10,
     borderRadius: 10,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    alignItems: "center",
   },
   productImage: {
     width: 300,
@@ -805,5 +859,18 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  outOfStockText: {
+    color: "#FF0000",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginVertical: 4,
+  },
+  basketButtonDisabled: {
+    backgroundColor: "#CCCCCC",
+    opacity: 0.7,
+  },
+  basketButtonTextDisabled: {
+    color: "#666666",
   },
 });

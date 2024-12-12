@@ -237,60 +237,65 @@ const Profile = ({ navigation, route }) => {
     return date.toLocaleDateString() + " " + date.toLocaleTimeString();
   };
 
-  const renderOrderItem = ({ item }) => (
-    <View style={styles.orderCard}>
-      <View style={styles.orderHeader}>
-        <Text style={styles.orderNumber}>Order #{item.order_id}</Text>
-        <Text
-          style={[
-            styles.orderStatus,
-            {
-              color:
-                item.status === "pending"
-                  ? "#FFA500"
-                  : item.status === "completed"
-                  ? "#008000"
-                  : "#FF0000",
-            },
-          ]}
-        >
-          {item.status.toUpperCase()}
-        </Text>
-      </View>
-
-      <Text style={styles.orderDate}>
-        Ordered on: {formatDate(item.order_date)}
-      </Text>
-
-      <View style={styles.itemsContainer}>
-        {item.items.map((orderItem, index) => (
-          <View key={index} style={styles.orderItem}>
-            <Text style={styles.itemName}>{orderItem.item_name}</Text>
-            <View style={styles.itemDetails}>
-              <Text style={styles.quantity}>x{orderItem.quantity}</Text>
-              <Text style={styles.price}>₱{orderItem.price}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.totalContainer}>
-        <View style={styles.totalRow}>
-          <Text style={styles.totalText}>
-            Total Amount: ₱{item.total_price}
+  const renderOrderItem = ({ item }) => {
+    console.log("Order status:", item.status);
+    return (
+      <View style={styles.orderCard}>
+        <View style={styles.orderHeader}>
+          <Text style={styles.orderNumber}>Order #{item.order_id}</Text>
+          <Text
+            style={[
+              styles.orderStatus,
+              {
+                color:
+                  item.status.toLowerCase() === "pending"
+                    ? "#666666"
+                    : item.status.toLowerCase() === "paid"
+                    ? "#008000"
+                    : "#FF0000",
+              },
+            ]}
+          >
+            {item.status}
           </Text>
-          {item.status.toLowerCase() === "pending" && (
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => handleCancelOrder(item.order_id)}
-            >
-              <Text style={styles.cancelButtonText}>Cancel Order</Text>
-            </TouchableOpacity>
-          )}
+        </View>
+
+        <Text style={styles.orderDate}>
+          Ordered on: {formatDate(item.order_date)}
+        </Text>
+
+        <View style={styles.itemsContainer}>
+          {item.items.map((orderItem, index) => (
+            <View key={index} style={styles.orderItem}>
+              <Text style={styles.itemName}>{orderItem.item_name}</Text>
+              <View style={styles.itemDetails}>
+                <Text style={styles.quantity}>x{orderItem.quantity}</Text>
+                <Text style={styles.price}>₱{orderItem.price}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.totalContainer}>
+          <Text style={styles.totalText}>
+            Total Amount: ₱{item.total_price.toFixed(2)}
+          </Text>
+
+          <View style={styles.totalRow}>
+            <View style={styles.spacer} />
+            {item.status.toLowerCase() === "pending" && (
+              <TouchableOpacity
+                style={styles.orderCancelButton}
+                onPress={() => handleCancelOrder(item.order_id)}
+              >
+                <Text style={styles.orderCancelButtonText}>Cancel Order</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const fetchFavorites = async (page = 1) => {
     try {
@@ -333,7 +338,11 @@ const Profile = ({ navigation, route }) => {
   };
 
   const handleAddToBasket = (item) => {
-    console.log("Selected item for basket:", item);
+    if (item.status === "Out of Stock") {
+      Alert.alert("Out of Stock", "This item is currently being restocked.");
+      return;
+    }
+
     setSelectedItem({
       id: item.item_id,
       item_name: item.item_name,
@@ -341,7 +350,9 @@ const Profile = ({ navigation, route }) => {
       item_image: item.item_image,
       vendor_username: item.vendor_username,
       Category: item.Category,
+      status: item.status,
     });
+    setQuantity("1"); // Reset quantity when opening modal
     setShowQuantityModal(true);
   };
 
@@ -409,6 +420,67 @@ const Profile = ({ navigation, route }) => {
     }
   };
 
+  const removeFavorite = async (favoriteId) => {
+    // Show confirmation dialog
+    Alert.alert(
+      "Remove Favorite",
+      "Are you sure you want to remove this favorite?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Yes",
+          onPress: async () => {
+            try {
+              console.log("Attempting to remove favorite:", {
+                favoriteId,
+                username,
+              });
+
+              const response = await fetch(
+                `${API_URL}/favorites/remove/${favoriteId}?username=${username}`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+
+              const data = await response.json();
+              console.log("Remove favorite response:", data);
+
+              if (data.success) {
+                // Remove the item from the favorites list
+                setFavorites(
+                  favorites.filter((item) => item.favorite_id !== favoriteId)
+                );
+                Alert.alert("Success", "Item removed from favorites");
+              } else {
+                Alert.alert(
+                  "Error",
+                  data.message || "Failed to remove favorite",
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => console.log("Detailed error:", data),
+                    },
+                  ]
+                );
+                console.error("Failed to remove favorite:", data);
+              }
+            } catch (error) {
+              console.error("Error removing favorite:", error);
+              Alert.alert("Error", "Failed to remove favorite");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderItem = ({ item }) => (
     <View style={styles.favoriteCard}>
       <Image
@@ -419,24 +491,47 @@ const Profile = ({ navigation, route }) => {
         }
         style={styles.favoriteImage}
         defaultSource={require("./assets/placeholder.png")}
-        onError={(e) => {
-          console.log("Image loading error:", e.nativeEvent.error);
-          console.log("Failed image:", item.item_name);
-        }}
       />
       <View style={styles.favoriteDetails}>
-        <Text style={styles.itemName} numberOfLines={1}>
-          {item.item_name}
-        </Text>
+        <View style={styles.favoriteItemHeader}>
+          <Text style={styles.itemName} numberOfLines={1}>
+            {item.item_name}
+          </Text>
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={() => removeFavorite(item.favorite_id)}
+          >
+            <Text style={styles.removeButtonText}>✕</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.vendorName} numberOfLines={1}>
           Vendor: {item.vendor_username}
         </Text>
         <Text style={styles.price}>₱{item.Price}</Text>
+
+        {/* Display Out of Stock label if status is Out of Stock */}
+        {item.status === "Out of Stock" && (
+          <Text style={styles.outOfStockText}>Out of Stock</Text>
+        )}
+
+        {/* Only show Add to Basket button if item is Available */}
         <TouchableOpacity
-          style={styles.addToBasketButton}
+          style={[
+            styles.addToBasketButton,
+            item.status === "Out of Stock" && styles.addToBasketButtonDisabled,
+          ]}
           onPress={() => handleAddToBasket(item)}
+          disabled={item.status === "Out of Stock"}
         >
-          <Text style={styles.addToBasketButtonText}>Add to Basket</Text>
+          <Text
+            style={[
+              styles.addToBasketButtonText,
+              item.status === "Out of Stock" &&
+                styles.addToBasketButtonTextDisabled,
+            ]}
+          >
+            {item.status === "Out of Stock" ? "Out of Stock" : "Add to Basket"}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -915,7 +1010,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalContent: {
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(59, 59, 59, 0.62)",
     height: "90%",
     marginHorizontal: 20,
     borderRadius: 20,
@@ -945,7 +1040,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     elevation: 3,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 10, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
@@ -1000,41 +1095,33 @@ const styles = StyleSheet.create({
   totalContainer: {
     borderTopWidth: 1,
     borderTopColor: "#eee",
-    paddingTop: 10,
     marginTop: 10,
-    alignItems: "flex-end",
+    paddingTop: 10,
+  },
+  totalText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#800000",
+    textAlign: "right",
+    marginBottom: 10,
   },
   totalRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
-    width: "100%",
   },
-  cancelButton: {
-    backgroundColor: "#FF0000",
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-    marginLeft: 10,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+  spacer: {
+    flex: 1,
   },
-  cancelButtonText: {
-    color: "#FFFFFF",
+  orderCancelButton: {
+    backgroundColor: "#800000",
+    padding: 10,
+    alignSelf: "flex-end",
+  },
+  orderCancelButtonText: {
+    color: "white",
     fontSize: 14,
     fontWeight: "bold",
-    textAlign: "center",
-  },
-  totalText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#800000",
   },
   emptyContainer: {
     flex: 1,
@@ -1200,6 +1287,40 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginVertical: 20,
+  },
+  removeButton: {
+    backgroundColor: "#FF0000",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  removeButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  favoriteItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+  },
+  outOfStockText: {
+    color: "#FF0000",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginVertical: 4,
+  },
+
+  addToBasketButtonDisabled: {
+    backgroundColor: "#CCCCCC",
+    opacity: 0.7,
+  },
+
+  addToBasketButtonTextDisabled: {
+    color: "#666666",
   },
 });
 

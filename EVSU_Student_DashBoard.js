@@ -156,26 +156,21 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
   };
 
   const updateQuantity = (change) => {
-    setSelectedProduct((prevProduct) => ({
-      ...prevProduct,
-      quantity: Math.max(1, (prevProduct.quantity || 1) + change),
-    }));
+    const currentQty = parseInt(quantity);
+    const newQty = Math.max(1, currentQty + change);
+    setQuantity(newQty.toString());
   };
 
-  const handleAddToBasket = (product, selectedQuantity) => {
-    const itemWithQuantity = {
-      id: String(Date.now()),
-      item_name: product.item_name,
-      Price: product.Price,
-      item_image: product.item_image,
-      quantity: selectedQuantity,
-      vendor_username: product.vendor_username,
-    };
+  const handleAddToBasket = (product) => {
+    if (product.status === "Out of Stock") {
+      Alert.alert("Out of Stock", "This item is currently being restocked.");
+      return;
+    }
 
-    addToBasket(itemWithQuantity);
-    setShowQuantityModal(false);
-    setQuantity(1);
-    Alert.alert("Success", "Item added to basket!");
+    // Set the quantity back to 1 when opening modal
+    setQuantity("1");
+    setSelectedProduct(product);
+    setShowQuantityModal(true);
   };
 
   const computeTotalAmount = () => {
@@ -262,12 +257,83 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
     }
   };
 
+  const confirmAddToBasket = () => {
+    if (selectedProduct) {
+      const basketItem = {
+        ...selectedProduct,
+        quantity: parseInt(quantity),
+      };
+      addToBasket(basketItem);
+      setShowQuantityModal(false);
+      setSelectedProduct(null);
+      Alert.alert("Success", "Item added to basket!");
+    }
+  };
+
+  const renderProductItem = (item, index) => (
+    <View key={index} style={styles.productItem}>
+      {/* Left: Image */}
+      <Image
+        source={{ uri: item.item_image }}
+        style={styles.productImage}
+        resizeMode="cover"
+      />
+
+      {/* Middle: Details */}
+      <View style={styles.productDetails}>
+        <Text style={styles.productName} numberOfLines={1}>
+          {item.item_name}
+        </Text>
+        <Text style={styles.productPrice}>₱{item.Price}</Text>
+        <Text style={styles.storeName} numberOfLines={1}>
+          {item.vendor_username}
+        </Text>
+        {item.status === "Out of Stock" && (
+          <Text style={styles.outOfStockText}>Out of Stock</Text>
+        )}
+      </View>
+
+      {/* Right: Action Buttons */}
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={styles.heartIconButton}
+          onPress={() => {
+            setSelectedFavoriteItem(item);
+            setShowFavoriteModal(true);
+          }}
+        >
+          <Image
+            source={require("./assets/red_heart.png")}
+            style={styles.heartIcon}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.basketButton,
+            item.status === "Out of Stock" && styles.basketButtonDisabled,
+          ]}
+          onPress={() => handleAddToBasket(item)}
+        >
+          <Image
+            source={require("./assets/icon_basket.png")}
+            style={[
+              styles.basketIcon,
+              item.status === "Out of Stock" && styles.basketIconDisabled,
+            ]}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.username}>{username}</Text>
-          <Text style={styles.connectionStatus}>{connectionStatus}</Text>
+          {/* <Text style={styles.connectionStatus}>{connectionStatus}</Text> */}
           <TouchableOpacity
             style={styles.basketIcon}
             onPress={() => navigation.navigate("Basket")}
@@ -304,58 +370,7 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
       <ScrollView contentContainerStyle={styles.content}>
         {showItems ? (
           <View style={styles.itemList}>
-            {searchResults.map((item, index) => (
-              <View key={index} style={styles.itemBackground}>
-                {/* Left: Image */}
-                <Image
-                  source={{ uri: item.item_image }}
-                  style={styles.itemImage}
-                  resizeMode="cover"
-                />
-
-                {/* Middle: Details */}
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemName} numberOfLines={1}>
-                    {item.item_name}
-                  </Text>
-                  <Text style={styles.itemPrice}>₱{item.Price}</Text>
-                  <Text style={styles.storeName} numberOfLines={1}>
-                    {item.vendor_username}
-                  </Text>
-                </View>
-
-                {/* Right: Action Buttons */}
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.heartIconButton}
-                    onPress={() => {
-                      console.log("Heart icon pressed for item:", item); // Debug log
-                      setSelectedFavoriteItem(item);
-                      setShowFavoriteModal(true);
-                    }}
-                  >
-                    <Image
-                      source={require("./assets/red_heart.png")}
-                      style={styles.heartIcon}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.basketButton}
-                    onPress={() => {
-                      setSelectedProduct(item);
-                      setShowQuantityModal(true);
-                    }}
-                  >
-                    <Image
-                      source={require("./assets/icon_basket.png")}
-                      style={styles.basketIcon}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+            {searchResults.map((item, index) => renderProductItem(item, index))}
           </View>
         ) : showStores ? (
           <View style={styles.storeList}>
@@ -396,58 +411,9 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
           </View>
         ) : showProducts ? (
           <View style={styles.productList}>
-            {products.map((product, index) => (
-              <View key={index} style={styles.productItem}>
-                {/* Left: Image */}
-                <Image
-                  source={{ uri: product.item_image }}
-                  style={styles.productImage}
-                  resizeMode="cover"
-                />
-
-                {/* Middle: Details */}
-                <View style={styles.productDetails}>
-                  <Text style={styles.productName} numberOfLines={1}>
-                    {product.item_name}
-                  </Text>
-                  <Text style={styles.productPrice}>₱{product.Price}</Text>
-                  <Text style={styles.storeName} numberOfLines={1}>
-                    {product.vendor_username}
-                  </Text>
-                </View>
-
-                {/* Right: Action Buttons */}
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.heartIconButton}
-                    onPress={() => {
-                      console.log("Heart icon pressed for item:", product); // Debug log
-                      setSelectedFavoriteItem(product);
-                      setShowFavoriteModal(true);
-                    }}
-                  >
-                    <Image
-                      source={require("./assets/red_heart.png")}
-                      style={styles.heartIcon}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.basketButton}
-                    onPress={() => {
-                      setSelectedProduct(product);
-                      setShowQuantityModal(true);
-                    }}
-                  >
-                    <Image
-                      source={require("./assets/icon_basket.png")}
-                      style={styles.basketIcon}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+            {products.map((product, index) =>
+              renderProductItem(product, index)
+            )}
           </View>
         ) : null}
       </ScrollView>
@@ -525,73 +491,77 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
-      <Modal
-        visible={showQuantityModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          setShowQuantityModal(false);
-          setQuantity(1);
-        }}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Quantity</Text>
+      {showQuantityModal && (
+        <Modal
+          visible={showQuantityModal}
+          transparent={true}
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.quantityModalContent}>
+              <Text style={styles.quantityModalTitle}>Select Quantity</Text>
 
-            {selectedProduct && (
-              <View style={styles.productInfo}>
-                <Text style={styles.productNameModal}>
-                  {selectedProduct.item_name}
-                </Text>
-                <Text style={styles.productPriceModal}>
-                  ₱{selectedProduct.Price}
-                </Text>
+              <View style={styles.quantitySelector}>
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => {
+                    const currentQty = parseInt(quantity);
+                    if (currentQty > 1) {
+                      setQuantity((currentQty - 1).toString());
+                    }
+                  }}
+                >
+                  <Text style={styles.quantityButtonText}>-</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.quantityText}>{quantity}</Text>
+
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => {
+                    const currentQty = parseInt(quantity);
+                    setQuantity((currentQty + 1).toString());
+                  }}
+                >
+                  <Text style={styles.quantityButtonText}>+</Text>
+                </TouchableOpacity>
               </View>
-            )}
 
-            <View style={styles.quantitySelector}>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => {
-                  if (quantity > 1) {
-                    setQuantity(quantity - 1);
-                  }
-                }}
-              >
-                <Text style={styles.quantityButtonText}>-</Text>
-              </TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setShowQuantityModal(false);
+                    setQuantity("1");
+                    setSelectedProduct(null);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
 
-              <Text style={styles.quantityText}>{quantity}</Text>
-
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => setQuantity(quantity + 1)}
-              >
-                <Text style={styles.quantityButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setShowQuantityModal(false);
-                  setQuantity(1);
-                }}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.addButton]}
-                onPress={() => handleAddToBasket(selectedProduct, quantity)}
-              >
-                <Text style={styles.buttonText}>Add to Basket</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton]}
+                  onPress={() => {
+                    if (selectedProduct) {
+                      const itemWithQuantity = {
+                        ...selectedProduct,
+                        quantity: parseInt(quantity),
+                      };
+                      addToBasket(itemWithQuantity);
+                      setShowQuantityModal(false);
+                      setQuantity("1");
+                      setSelectedProduct(null);
+                      Alert.alert("Success", "Item added to basket!");
+                    }
+                  }}
+                >
+                  <Text style={styles.confirmButtonText}>Add to Basket</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
       <Modal
         animationType="slide"
         transparent={true}
@@ -1300,6 +1270,103 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  outOfStockText: {
+    color: "red",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginTop: 2,
+  },
+  basketButtonDisabled: {
+    backgroundColor: "#cccccc",
+  },
+  basketIconDisabled: {
+    opacity: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quantityModalContent: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 15,
+    width: "80%",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  quantityModalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#800000",
+  },
+  quantitySelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 25,
+    width: "100%",
+    justifyContent: "center",
+  },
+  quantityButton: {
+    backgroundColor: "#800000",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 20,
+  },
+  quantityButtonText: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  quantityText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    minWidth: 40,
+    textAlign: "center",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 10,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 5,
+    elevation: 2,
+  },
+  cancelButton: {
+    backgroundColor: "#cccccc",
+  },
+  confirmButton: {
+    backgroundColor: "#800000",
+  },
+  cancelButtonText: {
+    color: "#333333",
+    textAlign: "center",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  confirmButtonText: {
+    color: "white",
+    textAlign: "center",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });
 export default EVSU_Student_DashBoard;

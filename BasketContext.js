@@ -45,12 +45,23 @@ export const BasketProvider = ({ children }) => {
     setBasket([]);
   };
 
+  const updateQuantity = (basketId, newQuantity) => {
+    setBasket((prevBasket) =>
+      prevBasket.map((item) =>
+        item.basketId === basketId
+          ? { ...item, quantity: parseInt(newQuantity) }
+          : item
+      )
+    );
+  };
+
   const value = {
     basket: basket || [],
     addToBasket,
     removeFromBasket,
     clearBasket,
     setBasket,
+    updateQuantity,
   };
 
   return (

@@ -9,7 +9,9 @@ import {
   ImageBackground,
   TouchableOpacity,
   Alert,
+  Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { API_URL } from "./config";
 
 export default function EVSU_Canteen_Signup({ navigation }) {
@@ -22,6 +24,7 @@ export default function EVSU_Canteen_Signup({ navigation }) {
   const [connectionStatus, setConnectionStatus] = useState(
     "Checking connection..."
   );
+  const [profileImage, setProfileImage] = useState(null);
 
   const checkConnection = async () => {
     try {
@@ -41,9 +44,49 @@ export default function EVSU_Canteen_Signup({ navigation }) {
     const interval = setInterval(checkConnection, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Request permission for accessing media library
+  useEffect(() => {
+    (async () => {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission needed",
+          "Please grant permission to access your photos"
+        );
+      }
+    })();
+  }, []);
+
+  // Function to pick image
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled) {
+        setProfileImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image");
+    }
+  };
+
   const handleSignUp = async () => {
     if (!name || !username || !email || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    if (!profileImage) {
+      Alert.alert("Error", "Please select a profile image");
       return;
     }
 
@@ -74,17 +117,31 @@ export default function EVSU_Canteen_Signup({ navigation }) {
 
     setLoading(true);
     try {
+      // Create form data
+      const formData = new FormData();
+      formData.append("name", name);
+      formData.append("username", username);
+      formData.append("email", email);
+      formData.append("password", password);
+
+      // Append profile image
+      const imageUri = profileImage.uri;
+      const filename = imageUri.split("/").pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : "image";
+
+      formData.append("profile_image", {
+        uri: imageUri,
+        name: filename,
+        type,
+      });
+
       const response = await fetch(`${API_URL}/signup`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "multipart/form-data",
         },
-        body: JSON.stringify({
-          name,
-          username,
-          email,
-          password,
-        }),
+        body: formData,
       });
 
       const data = await response.json();
@@ -122,6 +179,23 @@ export default function EVSU_Canteen_Signup({ navigation }) {
           <Text style={styles.connectionStatus}>{connectionStatus}</Text>
         </View>
         <View style={styles.form}>
+          <TouchableOpacity
+            style={styles.imagePickerContainer}
+            onPress={pickImage}
+          >
+            {profileImage ? (
+              <Image
+                source={{ uri: profileImage.uri }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={styles.placeholderContainer}>
+                <Text style={styles.placeholderText}>
+                  Tap to add profile photo
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
             placeholder="Full Name"
@@ -200,6 +274,7 @@ const styles = StyleSheet.create({
   },
   form: {
     width: "100%",
+    alignItems: "center",
   },
   input: {
     borderWidth: 1,
@@ -207,6 +282,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 10,
     backgroundColor: "#fff",
+    width: "100%",
   },
   loginLinkText: {
     color: "#007AFF",
@@ -217,5 +293,32 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontSize: 12,
     color: "#666",
+  },
+  imagePickerContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#f0f0f0",
+    alignSelf: "center",
+    marginBottom: 20,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#800000",
+  },
+  profileImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 10,
+  },
+  placeholderText: {
+    color: "#666",
+    textAlign: "center",
+    fontSize: 14,
   },
 });
