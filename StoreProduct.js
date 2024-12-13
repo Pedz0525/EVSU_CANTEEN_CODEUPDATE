@@ -48,13 +48,14 @@ export default function StoreProduct({ route }) {
               console.log("Sample product:", {
                 item_name: data.products[0].item_name,
                 Price: data.products[0].Price,
-                vendor_username: data.products[0].vendor_username || storeName,
+                stall_name: data.products[0].stall_name || storeName,
               });
             }
             setProducts(
               data.products.map((product) => ({
                 ...product,
-                vendor_username: product.vendor_username || storeName, // Ensure vendor_username is set
+                vendor_id: product.vendor_id,
+                stall_name: product.stall_name || storeName,
               }))
             );
           } else {
@@ -71,44 +72,45 @@ export default function StoreProduct({ route }) {
 
   const fetchCategoryProducts = async (category) => {
     try {
-      const encodedStoreName = encodeURIComponent(storeName);
+      console.log("Current store details:", {
+        storeName,
+        storeLocation,
+        category,
+      });
+
+      const encodedStoreName = encodeURIComponent(storeLocation);
       const encodedCategory = encodeURIComponent(category);
+
+      console.log(
+        "Making request to:",
+        `${API_URL}/categories/${encodedStoreName}?category=${encodedCategory}`
+      );
 
       const response = await fetch(
         `${API_URL}/categories/${encodedStoreName}?category=${encodedCategory}`
       );
 
-      console.log("Fetching from:", {
-        storeName: storeName,
-        category: category,
-      });
-
       const data = await response.json();
-      console.log("API Response:", data);
+      console.log("Category API Response:", data);
 
       if (data.success) {
-        // Log the first product to verify the structure
-        if (data.products.length > 0) {
-          console.log("Sample category product:", {
-            item_name: data.products[0].item_name,
-            Price: data.products[0].Price,
-            vendor_username: data.products[0].vendor_username || storeName,
-          });
-        }
-        setCategoryProducts(
-          data.products.map((product) => ({
-            ...product,
-            vendor_username: product.vendor_username || storeName, // Ensure vendor_username is set
-          }))
-        );
+        setCategoryProducts(data.products);
         setModalVisible(true);
       } else {
         console.error("Failed to fetch category products:", data.message);
+        Alert.alert(
+          "Error",
+          `Failed to fetch ${category} for ${storeLocation}: ${data.message}`
+        );
         setCategoryProducts([]);
         setModalVisible(true);
       }
     } catch (error) {
       console.error("Error fetching category products:", error);
+      Alert.alert(
+        "Error",
+        `Failed to fetch ${category} products: ${error.message}`
+      );
     }
   };
 
@@ -148,12 +150,13 @@ export default function StoreProduct({ route }) {
       Price: selectedProduct.Price,
       item_image: selectedProduct.item_image,
       quantity: quantity,
-      vendor_username: selectedProduct.vendor_username || storeName,
+      stall_name: selectedProduct.stall_name || storeName,
       Category: selectedProduct.Category,
       status: selectedProduct.status,
+      vendor_id: selectedProduct.vendor_id, // Ensure this is defined
     };
 
-    console.log("Adding to basket:", itemWithQuantity);
+    console.log("Adding to basket:", itemWithQuantity); // Check if vendor_id is included
     addToBasket(itemWithQuantity);
     setShowQuantityModal(false);
     setQuantity(1);
@@ -166,7 +169,11 @@ export default function StoreProduct({ route }) {
   };
 
   const handleAddToFavorites = (item) => {
-    setSelectedFavoriteItem(item);
+    setSelectedFavoriteItem({
+      ...item,
+      vendor_id: item.vendor_id,
+      item_name: item.item_name,
+    });
     setShowFavoriteConfirmModal(true);
   };
 
@@ -180,10 +187,8 @@ export default function StoreProduct({ route }) {
 
       const favoriteData = {
         customer_id: username,
-        vendor_id: storeName,
+        vendor_id: selectedFavoriteItem.vendor_id,
         item_name: selectedFavoriteItem.item_name,
-        vendor_username: storeName,
-        Price: selectedFavoriteItem.Price,
       };
 
       console.log(
@@ -300,6 +305,7 @@ export default function StoreProduct({ route }) {
                   </TouchableOpacity>
                   <Text style={styles.productName}>{product.item_name}</Text>
                   <Text style={styles.productPrice}>₱{product.Price}</Text>
+                  <Text style={styles.stallName}>{product.stall_name}</Text>
                   {product.status === "Out of Stock" && (
                     <Text style={styles.outOfStockText}>Out of Stock</Text>
                   )}
@@ -335,7 +341,8 @@ export default function StoreProduct({ route }) {
               style={styles.category}
               onPress={() => {
                 console.log("Selected Category: Dishes");
-                console.log("Selected Store:", storeName);
+                console.log("Current Store:", storeLocation);
+                console.log("Store Type:", typeof storeLocation);
                 fetchCategoryProducts("Dishes");
               }}
             >
@@ -725,7 +732,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 15,
     textAlign: "center",
-    color: "white",
+    color: "#333",
   },
   productInfo: {
     marginBottom: 15,

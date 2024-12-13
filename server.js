@@ -8,7 +8,7 @@ const sharp = require("sharp");
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
 
-const API_URL = process.env.API_URL || "http://192.168.254.121:3000"; // Replace with your actual IP and port
+const API_URL = process.env.API_URL || "http://192.168.254.107:3000"; // Replace with your actual IP and port
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -20,7 +20,7 @@ const upload = multer({
 const app = express();
 app.use(
   cors({
-    origin: ["http://192.168.254.121:3000", "http://localhost:3000"],
+    origin: ["http://192.168.254.107:3000", "http://localhost:3000"],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   })
@@ -435,85 +435,26 @@ app.get("/vendors", (req, res) => {
   });
 });
 
-// Add this endpoint to fetch products
-// app.get("/items/:vendorUsername", (req, res) => {
-//   const { vendorUsername } = req.params;
-//   const { category } = req.query;
-
-//   // Log the received parameters
-//   console.log("Fetching items for:", { vendorUsername, category });
-
-//   let query =
-//     "SELECT item_name, item_image, Price, Category FROM items WHERE vendor_username = ?";
-//   let queryParams = [vendorUsername];
-
-//   if (category) {
-//     // Use BINARY for exact case-sensitive matching
-//     query += " AND BINARY Category = ?";
-//     queryParams.push(category);
-//   }
-
-//   console.log("Executing query:", query, queryParams);
-
-//   db.query(query, queryParams, (err, results) => {
-//     if (err) {
-//       console.error("Database error:", err);
-//       return res.json({
-//         success: false,
-//         message: "Failed to fetch items",
-//       });
-//     }
-
-//     try {
-//       const itemsWithImages = results.map((item) => ({
-//         ...item,
-//         item_image: item.item_image
-//           ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
-//           : null,
-//       }));
-
-//       console.log(`Found ${itemsWithImages.length} items`);
-//       console.log(
-//         "Categories found:",
-//         itemsWithImages.map((i) => i.Category)
-//       );
-
-//       res.json({
-//         success: true,
-//         products: itemsWithImages,
-//       });
-//     } catch (error) {
-//       console.error("Error processing images:", error);
-//       res.json({
-//         success: false,
-//         message: "Error processing images",
-//         error: error.message,
-//       });
-//     }
-//   });
-// });
-
-// ... existing code ...
-
 app.get("/items", (req, res) => {
-  console.log("Fetching items...");
-
   const query = `
     SELECT 
-      item_name, 
-      item_image, 
-      Price, 
-      vendor_username,
-      Category,
-      status 
-    FROM items
-    WHERE status != 'Unavailable'
+      i.item_id,
+      i.item_name,
+      i.item_image,
+      i.Price,
+      i.Category,
+      i.status,
+      v.vendor_id,  -- Fetch vendor_id from the vendors table
+      v.stall_name  -- Fetch stall_name for display purposes
+    FROM items i
+    JOIN vendors v ON i.vendor_id = v.vendor_id  -- Join with vendors table
+    WHERE i.status != 'Unavailable'
   `;
 
   db.query(query, (err, results) => {
     if (err) {
       console.error("Database error:", err);
-      return res.json({
+      return res.status(500).json({
         success: false,
         message: "Failed to fetch items",
         error: err.message,
@@ -522,262 +463,24 @@ app.get("/items", (req, res) => {
 
     try {
       const itemsWithImages = results.map((item) => ({
+        item_id: item.item_id,
         item_name: item.item_name,
+        Price: item.Price,
+        Category: item.Category,
+        vendor_id: item.vendor_id, // Use vendor_id
+        stall_name: item.stall_name, // For display
+        status: item.status,
         item_image: item.item_image
           ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
           : null,
-        Price: item.Price,
-        vendor_username: item.vendor_username,
-        Category: item.Category,
-        status: item.status,
-      }));
-
-      console.log("Items fetched successfully, count:", itemsWithImages.length);
-
-      res.json({
-        success: true,
-        products: itemsWithImages,
-      });
-    } catch (error) {
-      console.error("Error processing images:", error);
-      res.json({
-        success: false,
-        message: "Error processing images",
-        error: error.message,
-      });
-    }
-  });
-});
-
-// ... existing code ...
-// Update multer configuration for mobile uploads
-
-app.post("/products", upload.single("ImageItem"), async (req, res) => {
-  console.log("Received upload request");
-  console.log("Body:", {
-    item_name: req.body.item_name,
-    price: req.body.price,
-    description: req.body.description,
-    category: req.body.category,
-    vendor_username: req.body.vendor_username,
-  });
-
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "No image file received",
-      });
-    }
-
-    // Resize and optimize the image
-    const optimizedImageBuffer = await sharp(req.file.buffer)
-      .resize(800, 800, {
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({ quality: 80 })
-      .toBuffer();
-
-    console.log("Original size:", req.file.size);
-    console.log("Optimized size:", optimizedImageBuffer.length);
-
-    const { item_name, price, description, category, vendor_username } =
-      req.body;
-
-    // Set default status as "Available"
-    const status = "Available";
-
-    const query = `
-      INSERT INTO items (
-        item_name, 
-        price, 
-        description, 
-        category, 
-        item_image, 
-        status, 
-        vendor_username
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    db.query(
-      query,
-      [
-        item_name,
-        price,
-        description,
-        category,
-        optimizedImageBuffer,
-        status,
-        vendor_username,
-      ],
-      (err, result) => {
-        if (err) {
-          console.error("Database error details:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to add item to database",
-            error: err.message,
-          });
-        }
-
-        console.log("Item added successfully, ID:", result.insertId);
-        res.status(200).json({
-          success: true,
-          message: "Item added successfully",
-          itemId: result.insertId,
-        });
-      }
-    );
-  } catch (error) {
-    console.error("Error processing request:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error processing request",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/vendor_signup", async (req, res) => {
-  const { vendorName, email, password } = req.body;
-
-  if (!vendorName || !email || !password) {
-    return res
-      .status(400)
-      .json({ success: false, message: "All fields are required" });
-  }
-
-  try {
-    const result = await db.query(
-      "INSERT INTO vendors (vendorName, email, password) VALUES (?, ?, ?)",
-      [vendorName, email, password]
-    );
-    res.json({ success: true, message: "Vendor registered successfully" });
-  } catch (error) {
-    console.error("Database Error:", error);
-    res.status(500).json({ success: false, message: "Database error" });
-  }
-});
-
-// Update this endpoint to fetch products by StoreName
-// Update the products endpoint
-// app.get("/products/:storeName", (req, res) => {
-//   const { storeName } = req.params;
-//   const { category } = req.query;
-
-//   console.log("Fetching products for:", { storeName, category });
-
-//   let query = `
-//     SELECT
-//       item_name,
-//       item_image,
-//       Price,
-//       Category,
-//       vendor_username,
-//       status
-//     FROM items
-//     WHERE vendor_username = ?
-//     AND status != 'Unavailable'
-//   `;
-
-//   let queryParams = [storeName];
-
-//   if (category) {
-//     query += " AND BINARY Category = ?";
-//     queryParams.push(category);
-//   }
-
-//   console.log("Executing query:", query, queryParams);
-
-//   db.query(query, queryParams, (err, results) => {
-//     if (err) {
-//       console.error("Database error:", err);
-//       return res.json({
-//         success: false,
-//         message: "Failed to fetch products",
-//       });
-//     }
-
-//     try {
-//       const productsWithImages = results.map((item) => ({
-//         item_name: item.item_name,
-//         item_image: item.item_image
-//           ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
-//           : null,
-//         Price: item.Price,
-//         Category: item.Category,
-//         vendor_username: item.vendor_username,
-//         status: item.status,
-//       }));
-
-//       console.log(`Found ${productsWithImages.length} products`);
-
-//       res.json({
-//         success: true,
-//         products: productsWithImages,
-//       });
-//     } catch (error) {
-//       console.error("Error processing images:", error);
-//       res.json({
-//         success: false,
-//         message: "Error processing images",
-//         error: error.message,
-//       });
-//     }
-//   });
-// });
-
-// Update the categories endpoint
-app.get("/categories/:vendorUsername", (req, res) => {
-  const { vendorUsername } = req.params;
-  const { category } = req.query;
-
-  console.log("Request received with:", {
-    vendorUsername: vendorUsername,
-    category: category,
-  });
-
-  const query = `
-    SELECT 
-      item_name, 
-      item_image, 
-      Price, 
-      Category, 
-      vendor_username,
-      status
-    FROM items 
-    WHERE LOWER(vendor_username) = LOWER(?) 
-    AND LOWER(Category) = LOWER(?)
-    AND status != 'Unavailable'
-  `;
-
-  console.log("Executing query with params:", [vendorUsername, category]);
-
-  db.query(query, [vendorUsername, category], (err, results) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.json({
-        success: false,
-        message: "Failed to fetch category items",
-        error: err.message,
-      });
-    }
-
-    try {
-      const itemsWithImages = results.map((item) => ({
-        item_name: item.item_name,
-        item_image: item.item_image
-          ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
-          : null,
-        Price: item.Price,
-        Category: item.Category,
-        vendor_username: item.vendor_username,
-        status: item.status,
       }));
 
       console.log(
-        `Found ${itemsWithImages.length} items for ${vendorUsername} in ${category}`
+        "Items fetched with status:",
+        itemsWithImages.map((item) => ({
+          name: item.item_name,
+          status: item.status,
+        }))
       );
 
       res.json({
@@ -786,7 +489,7 @@ app.get("/categories/:vendorUsername", (req, res) => {
       });
     } catch (error) {
       console.error("Error processing images:", error);
-      res.json({
+      res.status(500).json({
         success: false,
         message: "Error processing images",
         error: error.message,
@@ -794,6 +497,109 @@ app.get("/categories/:vendorUsername", (req, res) => {
     }
   });
 });
+
+// Update the categories endpoint
+app.get("/categories/:storeName", (req, res) => {
+  const { storeName } = req.params;
+  const { category } = req.query;
+
+  console.log("Request received with:", {
+    storeName: storeName,
+    category: category,
+  });
+
+  // First, get the vendor_id using stall_name
+  const vendorQuery = `
+    SELECT vendor_id, stall_name 
+    FROM vendors 
+    WHERE LOWER(stall_name) = LOWER(?)
+  `;
+
+  console.log("Looking up vendor with stall_name:", storeName);
+
+  db.query(vendorQuery, [storeName], (vendorErr, vendorResults) => {
+    if (vendorErr) {
+      console.error("Vendor lookup error:", vendorErr);
+      return res.json({
+        success: false,
+        message: `Database error looking up vendor: ${vendorErr.message}`,
+      });
+    }
+
+    if (vendorResults.length === 0) {
+      console.error("No vendor found for stall_name:", storeName);
+      return res.json({
+        success: false,
+        message: `No vendor found with stall name: ${storeName}`,
+      });
+    }
+
+    const vendorId = vendorResults[0].vendor_id;
+    console.log("Found vendor_id:", vendorId);
+
+    const query = `
+      SELECT 
+        i.item_id,
+        i.item_name, 
+        i.item_image, 
+        i.Price, 
+        i.Category, 
+        i.status,
+        v.vendor_id,
+        v.stall_name
+      FROM items i
+      JOIN vendors v ON i.vendor_id = v.vendor_id
+      WHERE i.vendor_id = ?
+      AND LOWER(i.Category) = LOWER(?)
+      AND i.status != 'Unavailable'
+    `;
+
+    console.log("Executing items query with params:", [vendorId, category]);
+
+    db.query(query, [vendorId, category], (err, results) => {
+      if (err) {
+        console.error("Database error fetching items:", err);
+        return res.json({
+          success: false,
+          message: "Failed to fetch category items",
+          error: err.message,
+        });
+      }
+
+      try {
+        const itemsWithImages = results.map((item) => ({
+          item_id: item.item_id,
+          item_name: item.item_name,
+          item_image: item.item_image
+            ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
+            : null,
+          Price: item.Price,
+          Category: item.Category,
+          vendor_id: item.vendor_id,
+          stall_name: item.stall_name,
+          status: item.status,
+        }));
+
+        console.log(
+          `Found ${itemsWithImages.length} items for vendor_id ${vendorId} in category ${category}`
+        );
+
+        res.json({
+          success: true,
+          products: itemsWithImages,
+        });
+      } catch (error) {
+        console.error("Error processing images:", error);
+        res.json({
+          success: false,
+          message: "Error processing images",
+          error: error.message,
+        });
+      }
+    });
+  });
+});
+
 app.get("/customer/profile/:username", (req, res) => {
   const { username } = req.params;
   console.log("Fetching profile for username:", username);
@@ -958,8 +764,9 @@ app.post("/orders/create", async (req, res) => {
 
         const actualCustomerId = customerResult[0].customer_id;
 
-        // Get vendor ID
-        const checkVendorQuery = "SELECT vendor_id FROM vendors WHERE name = ?";
+        // Verify vendor ID directly
+        const checkVendorQuery =
+          "SELECT vendor_id FROM vendors WHERE vendor_id = ?";
 
         db.query(checkVendorQuery, [vendor_id], (vendorErr, vendorResult) => {
           if (vendorErr || vendorResult.length === 0) {
@@ -992,12 +799,12 @@ app.post("/orders/create", async (req, res) => {
               // Process each item
               const processItems = items.map((item) => {
                 return new Promise((resolve, reject) => {
-                  // Get the item from the items table using item_name and vendor
+                  // Get the item from the items table using item_name and vendor_id
                   const itemQuery =
-                    "SELECT item_id FROM items WHERE item_name = ? AND vendor_username = ?";
+                    "SELECT item_id FROM items WHERE item_name = ? AND vendor_id = ?";
                   db.query(
                     itemQuery,
-                    [item.item_name, item.vendor_username],
+                    [item.item_name, item.vendor_id], // Use vendor_id
                     (itemErr, itemResult) => {
                       if (itemErr) {
                         console.error("Item query error:", itemErr);
@@ -1184,7 +991,7 @@ app.get("/search", async (req, res) => {
         item_name, 
         item_image, 
         Price, 
-        vendor_username,
+        vendor_id,
         status
       FROM items
       WHERE 
@@ -1215,8 +1022,8 @@ app.get("/search", async (req, res) => {
             ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
             : null,
           Price: item.Price,
-          vendor_username: item.vendor_username,
-          status: item.status, // Include status in response
+          vendor_id: item.vendor_id,
+          status: item.status,
         }));
 
         console.log(
@@ -1249,273 +1056,7 @@ app.get("/search", async (req, res) => {
   }
 });
 
-app.post("/login", async (req, res) => {
-  console.log("Login attempt:", req.body);
-
-  const { usernameOrEmail, password } = req.body;
-
-  // Validation
-  if (!usernameOrEmail || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "Please provide all required fields",
-    });
-  }
-
-  try {
-    // Check in vendors table first
-    const vendorQuery = `
-      SELECT * FROM vendors 
-      WHERE (email = ? OR name = ?) 
-      AND password = ?
-    `;
-
-    db.query(
-      vendorQuery,
-      [usernameOrEmail, usernameOrEmail, password],
-      (err, vendorResults) => {
-        if (err) {
-          console.error("Database error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Database error",
-          });
-        }
-
-        // If found in vendors
-        if (vendorResults.length > 0) {
-          const vendor = vendorResults[0];
-          return res.json({
-            success: true,
-            message: "Login successful",
-            userType: "Login",
-            user: {
-              id: vendor.id,
-              name: vendor.name,
-              email: vendor.email,
-            },
-          });
-        }
-
-        // If not found in vendors, check customers
-        const customerQuery = `
-        SELECT * FROM customers 
-        WHERE (email = ? OR name = ?) 
-        AND password = ?
-      `;
-
-        db.query(
-          customerQuery,
-          [usernameOrEmail, usernameOrEmail, password],
-          (err, customerResults) => {
-            if (err) {
-              console.error("Database error:", err);
-              return res.status(500).json({
-                success: false,
-                message: "Database error",
-              });
-            }
-
-            // If found in customers
-            if (customerResults.length > 0) {
-              const customer = customerResults[0];
-              return res.json({
-                success: true,
-                message: "Login successful",
-                userType: "Student",
-                user: {
-                  id: customer.id,
-                  name: customer.name,
-                  email: customer.email,
-                },
-              });
-            }
-
-            // If not found in either table
-            return res.status(401).json({
-              success: false,
-              message: "Invalid username/email or password",
-            });
-          }
-        );
-      }
-    );
-  } catch (error) {
-    console.error("Server error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-});
-
-app.post("/signup", async (req, res) => {
-  console.log("Received signup request"); // Debug log
-  console.log("Request body:", req.body); // Debug log
-
-  try {
-    const { name, email, password } = req.body;
-
-    // Validate input
-    if (!name || !email || !password) {
-      console.log("Validation failed: Missing fields"); // Debug log
-      return res.status(400).json({
-        success: false,
-        message: "Please provide all required fields",
-      });
-    }
-
-    // Check if email exists
-    console.log("Checking if email exists:", email); // Debug log
-    const checkEmail = "SELECT * FROM vendors WHERE email = ?";
-
-    db.query(checkEmail, [email], (err, results) => {
-      if (err) {
-        console.error("Database error during email check:", err); // Debug log
-        return res.status(500).json({
-          success: false,
-          message: "Database error",
-        });
-      }
-
-      if (results.length > 0) {
-        console.log("Email already exists"); // Debug log
-        return res.status(400).json({
-          success: false,
-          message: "Email already exists",
-        });
-      }
-
-      // Insert new user
-      console.log("Inserting new user"); // Debug log
-      const insertQuery =
-        "INSERT INTO vendors (name, email, password) VALUES (?, ?, ?)";
-
-      db.query(insertQuery, [name, email, password], (err, results) => {
-        if (err) {
-          console.error("Database error during insert:", err); // Debug log
-          return res.status(500).json({
-            success: false,
-            message: "Failed to create account",
-          });
-        }
-
-        console.log("User created successfully"); // Debug log
-        res.status(200).json({
-          success: true,
-          message: "Account created successfully",
-        });
-      });
-    });
-  } catch (error) {
-    console.error("Server error:", error); // Debug log
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-});
-
 // Vendor login endpoint with password hashing
-app.post("/login_vendor", async (req, res) => {
-  console.log("Login attempt:", req.body);
-
-  const { usernameOrEmail, password } = req.body;
-
-  // Validation
-  if (!usernameOrEmail || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "Please provide all required fields",
-    });
-  }
-
-  try {
-    // Check in vendors table first
-    const vendorQuery = `
-      SELECT * FROM vendors 
-      WHERE (email = ? OR name = ?) 
-      AND password = ?
-    `;
-
-    db.query(
-      vendorQuery,
-      [usernameOrEmail, usernameOrEmail, password],
-      (err, vendorResults) => {
-        if (err) {
-          console.error("Database error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Database error",
-          });
-        }
-
-        // If found in vendors
-        if (vendorResults.length > 0) {
-          const vendor = vendorResults[0];
-          return res.json({
-            success: true,
-            message: "Login successful",
-            userType: "Login",
-            user: {
-              id: vendor.id,
-              name: vendor.name,
-              email: vendor.email,
-            },
-          });
-        }
-
-        // If not found in vendors, check customers
-        const customerQuery = `
-        SELECT * FROM customers 
-        WHERE (email = ? OR name = ?) 
-        AND password = ?
-      `;
-
-        db.query(
-          customerQuery,
-          [usernameOrEmail, usernameOrEmail, password],
-          (err, customerResults) => {
-            if (err) {
-              console.error("Database error:", err);
-              return res.status(500).json({
-                success: false,
-                message: "Database error",
-              });
-            }
-
-            // If found in customers
-            if (customerResults.length > 0) {
-              const customer = customerResults[0];
-              return res.json({
-                success: true,
-                message: "Login successful",
-                userType: "Student",
-                user: {
-                  id: customer.id,
-                  name: customer.name,
-                  email: customer.email,
-                },
-              });
-            }
-
-            // If not found in either table
-            return res.status(401).json({
-              success: false,
-              message: "Invalid username/email or password",
-            });
-          }
-        );
-      }
-    );
-  } catch (error) {
-    console.error("Server error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-});
 
 // Add debugging middleware
 app.use((req, res, next) => {
@@ -1537,244 +1078,11 @@ const storage = multer.diskStorage({
 });
 
 // Profile update endpoint
-app.post(
-  "/vendor_update_profile",
-  upload.single("profile_image"),
-  async (req, res) => {
-    try {
-      console.log("Received update request:", req.body);
-      console.log("Received file:", req.file);
-
-      const { name, email, oldPassword, newPassword } = req.body;
-      const profileImage = req.file ? req.file.filename : null;
-
-      // Check if vendor exists
-      const checkQuery = "SELECT * FROM vendors WHERE email = ?";
-      db.query(checkQuery, [email], async (checkErr, checkResults) => {
-        if (checkErr || checkResults.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Vendor not found",
-          });
-        }
-
-        // Build update query
-        let updateFields = [];
-        let values = [];
-
-        if (name) {
-          updateFields.push("name = ?");
-          values.push(name);
-        }
-        if (profileImage) {
-          updateFields.push("profile_image = ?");
-          values.push(profileImage);
-        }
-        if (newPassword && oldPassword) {
-          // Verify old password
-          const passwordMatch = await bcrypt.compare(
-            oldPassword,
-            checkResults[0].password
-          );
-          if (!passwordMatch) {
-            return res.status(401).json({
-              success: false,
-              message: "Current password is incorrect",
-            });
-          }
-          // Hash new password
-          const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-          updateFields.push("password = ?");
-          values.push(hashedPassword);
-        }
-
-        if (updateFields.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: "No fields to update",
-          });
-        }
-
-        // Add WHERE clause value
-        values.push(email);
-
-        const updateQuery = `UPDATE vendors SET ${updateFields.join(
-          ", "
-        )} WHERE email = ?`;
-
-        // Execute update query
-        db.query(updateQuery, values, (updateErr, updateResults) => {
-          if (updateErr) {
-            console.error("Database error:", updateErr);
-            return res.status(500).json({
-              success: false,
-              message: "Database error occurred",
-            });
-          }
-
-          // When sending successful response, include the full image URL
-          return res.status(200).json({
-            success: true,
-            message: "Profile updated successfully",
-            data: {
-              name: name || checkResults[0].name,
-              email,
-              profileImage: profileImage
-                ? `/uploads/${profileImage}`
-                : checkResults[0].profile_image,
-            },
-          });
-        });
-      });
-    } catch (error) {
-      console.error("Server error:", error);
-      res.status(500).json({
-        success: false,
-        message: "Server error occurred",
-      });
-    }
-  }
-);
 
 // Serve static files
 app.use("/uploads", express.static("uploads"));
 
 // Vendor information endpoint
-app.get("/vendor_information", (req, res) => {
-  const email = req.query.email;
-
-  if (!email) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Email is required" });
-  }
-
-  const query =
-    "SELECT vendor_id, name, email, profile_image FROM vendors WHERE email = ?";
-  db.query(query, [email], (error, results) => {
-    if (error) {
-      console.error("Database error:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Database error" });
-    }
-
-    if (results.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Vendor not found" });
-    }
-
-    const vendor = results[0];
-    res.json({
-      success: true,
-      vendor_id: vendor.vendor_id,
-      name: vendor.name,
-      email: vendor.email,
-      profileImage: vendor.profile_image
-        ? `/uploads/${vendor.profile_image}`
-        : null,
-    });
-  });
-});
-
-app.post(
-  "/vendor_update_profile",
-  upload.single("profile_image"),
-  async (req, res) => {
-    try {
-      console.log("Received update request:", req.body);
-      console.log("Received file:", req.file);
-
-      const { name, email, oldPassword, newPassword } = req.body;
-
-      // First check if vendor exists
-      const checkQuery = "SELECT * FROM vendors WHERE email = ?";
-      db.query(checkQuery, [email], async (checkErr, checkResults) => {
-        if (checkErr || checkResults.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Vendor not found",
-          });
-        }
-
-        // Build update query
-        let updateFields = [];
-        let values = [];
-
-        if (name) {
-          updateFields.push("name = ?");
-          values.push(name);
-        }
-
-        if (req.file) {
-          updateFields.push("profile_image = ?");
-          values.push(req.file.filename);
-        }
-
-        if (newPassword && oldPassword) {
-          // Verify old password
-          const passwordMatch = await bcrypt.compare(
-            oldPassword,
-            checkResults[0].password
-          );
-          if (!passwordMatch) {
-            return res.status(401).json({
-              success: false,
-              message: "Current password is incorrect",
-            });
-          }
-          // Hash new password
-          const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-          updateFields.push("password = ?");
-          values.push(hashedPassword);
-        }
-
-        if (updateFields.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: "No fields to update",
-          });
-        }
-
-        // Add WHERE clause value
-        values.push(email);
-
-        const updateQuery = `UPDATE vendors SET ${updateFields.join(
-          ", "
-        )} WHERE email = ?`;
-
-        db.query(updateQuery, values, (updateErr, updateResults) => {
-          if (updateErr) {
-            console.error("Update error:", updateErr);
-            return res.status(500).json({
-              success: false,
-              message: "Failed to update profile",
-            });
-          }
-
-          res.json({
-            success: true,
-            message: "Profile updated successfully",
-            data: {
-              name: name || checkResults[0].name,
-              email,
-              profileImage: req.file
-                ? `/uploads/${req.file.filename}`
-                : checkResults[0].profile_image,
-            },
-          });
-        });
-      });
-    } catch (error) {
-      console.error("Server error:", error);
-      res.status(500).json({
-        success: false,
-        message: "Server error occurred",
-      });
-    }
-  }
-);
 
 app.get("/customer", (req, res) => {
   const { username } = req.query;
@@ -1834,7 +1142,7 @@ app.post("/favorites/create", async (req, res) => {
   try {
     console.log("Received favorite data:", JSON.stringify(req.body, null, 2));
 
-    const { customer_id, vendor_username, item_name, Price } = req.body;
+    const { customer_id, vendor_id, item_name } = req.body;
 
     // Get customer ID
     const checkCustomerQuery =
@@ -1854,91 +1162,88 @@ app.post("/favorites/create", async (req, res) => {
 
         const actualCustomerId = customerResult[0].customer_id;
 
-        // Get vendor ID
-        const checkVendorQuery = "SELECT vendor_id FROM vendors WHERE name = ?";
+        // Verify vendor ID directly
+        const checkVendorQuery =
+          "SELECT vendor_id FROM vendors WHERE vendor_id = ?";
 
-        db.query(
-          checkVendorQuery,
-          [vendor_username],
-          (vendorErr, vendorResult) => {
-            if (vendorErr || vendorResult.length === 0) {
-              return res.status(400).json({
-                success: false,
-                message: `Vendor not found: ${vendor_username}`,
-              });
-            }
+        db.query(checkVendorQuery, [vendor_id], (vendorErr, vendorResult) => {
+          if (vendorErr || vendorResult.length === 0) {
+            return res.status(400).json({
+              success: false,
+              message: `Vendor not found: ${vendor_id}`,
+            });
+          }
 
-            const actualVendorId = vendorResult[0].vendor_id;
+          const actualVendorId = vendorResult[0].vendor_id;
 
-            // Get item ID
-            const itemQuery =
-              "SELECT item_id FROM items WHERE item_name = ? AND vendor_username = ?";
+          // Get item ID
+          const itemQuery =
+            "SELECT item_id FROM items WHERE item_name = ? AND vendor_id = ?";
 
-            db.query(
-              itemQuery,
-              [item_name, vendor_username],
-              (itemErr, itemResult) => {
-                if (itemErr || itemResult.length === 0) {
-                  return res.status(400).json({
-                    success: false,
-                    message: `Item not found: ${item_name}`,
-                  });
-                }
+          db.query(
+            itemQuery,
+            [item_name, vendor_id], // Use vendor_id
+            (itemErr, itemResult) => {
+              if (itemErr || itemResult.length === 0) {
+                return res.status(400).json({
+                  success: false,
+                  message: `Item not found: ${item_name}`,
+                });
+              }
 
-                const actualItemId = itemResult[0].item_id;
+              const actualItemId = itemResult[0].item_id;
 
-                // Check if item is already in favorites
-                const checkFavoriteQuery =
-                  "SELECT * FROM favorites WHERE customer_id = ? AND item_id = ? AND vendor_id = ?";
+              // Check if item is already in favorites
+              const checkFavoriteQuery =
+                "SELECT * FROM favorites WHERE customer_id = ? AND item_id = ? AND vendor_id = ?";
 
-                db.query(
-                  checkFavoriteQuery,
-                  [actualCustomerId, actualItemId, actualVendorId],
-                  (favoriteCheckErr, favoriteCheckResult) => {
-                    if (favoriteCheckErr) {
-                      return res.status(500).json({
-                        success: false,
-                        message: "Error checking favorites",
-                        error: favoriteCheckErr.message,
-                      });
-                    }
+              db.query(
+                checkFavoriteQuery,
+                [actualCustomerId, actualItemId, actualVendorId],
+                (favoriteCheckErr, favoriteCheckResult) => {
+                  if (favoriteCheckErr) {
+                    return res.status(500).json({
+                      success: false,
+                      message: "Error checking favorites",
+                      error: favoriteCheckErr.message,
+                    });
+                  }
 
-                    // If item is already in favorites
-                    if (favoriteCheckResult.length > 0) {
-                      return res.status(400).json({
-                        success: false,
-                        message: "Item is already in favorites",
-                      });
-                    }
+                  // If item is already in favorites
+                  if (favoriteCheckResult.length > 0) {
+                    return res.status(400).json({
+                      success: false,
+                      message: "Item is already in favorites",
+                    });
+                  }
 
-                    // If not in favorites, proceed to insert
-                    const favoriteQuery =
-                      "INSERT INTO favorites (customer_id, item_id, vendor_id, Price) VALUES (?, ?, ?, ?)";
+                  // If not in favorites, proceed to insert
+                  const favoriteQuery =
+                    "INSERT INTO favorites (customer_id, item_id, vendor_id) VALUES (?, ?, ?)";
 
-                    db.query(
-                      favoriteQuery,
-                      [actualCustomerId, actualItemId, actualVendorId, Price],
-                      (favoriteErr) => {
-                        if (favoriteErr) {
-                          return res.status(500).json({
-                            success: false,
-                            message: "Failed to add favorite",
-                            error: favoriteErr.message,
-                          });
-                        }
-
-                        res.json({
-                          success: true,
-                          message: "Favorite added successfully",
+                  db.query(
+                    favoriteQuery,
+                    [actualCustomerId, actualItemId, actualVendorId],
+                    (favoriteErr) => {
+                      if (favoriteErr) {
+                        return res.status(500).json({
+                          success: false,
+                          message: "Failed to add favorite",
+                          error: favoriteErr.message,
                         });
                       }
-                    );
-                  }
-                );
-              }
-            );
-          }
-        );
+
+                      res.json({
+                        success: true,
+                        message: "Favorite added successfully",
+                      });
+                    }
+                  );
+                }
+              );
+            }
+          );
+        });
       }
     );
   } catch (error) {
@@ -1994,17 +1299,18 @@ app.get("/favorites/:username", async (req, res) => {
 
         const favoritesQuery = `
           SELECT 
-            f.favorite_id,
+            f.favorite_item_id,
             i.item_id,
             i.item_name,
             i.Price,
             i.Category,
             i.item_image,
             i.status,
-            v.username as vendor_username
+            v.vendor_id,
+            v.stall_name  -- Added stall_name to the query
           FROM favorites f
           JOIN items i ON f.item_id = i.item_id
-          JOIN vendors v ON i.vendor_username = v.username
+          JOIN vendors v ON f.vendor_id = v.vendor_id
           WHERE f.customer_id = ?
           AND i.status != 'Unavailable'
           ORDER BY 
@@ -2030,12 +1336,13 @@ app.get("/favorites/:username", async (req, res) => {
 
             try {
               const favoritesWithImages = results.map((item) => ({
-                favorite_id: item.favorite_id,
+                favorite_item_id: item.favorite_item_id,
                 item_id: item.item_id,
                 item_name: item.item_name,
                 Price: item.Price,
                 Category: item.Category,
-                vendor_username: item.vendor_username,
+                vendor_id: item.vendor_id,
+                stall_name: item.stall_name,
                 status: item.status,
                 item_image: item.item_image
                   ? `data:image/jpeg;base64,${item.item_image.toString(
@@ -2090,16 +1397,18 @@ app.get("/items/:storeName", (req, res) => {
 
   const query = `
     SELECT 
-      item_id,
-      item_name,
-      item_image,
-      Price,
-      Category,
-      vendor_username,
-      status
-    FROM items 
-    WHERE vendor_username = ? 
-    AND status != 'Unavailable'
+      i.item_id,
+      i.item_name,
+      i.item_image,
+      i.Price,
+      i.Category,
+      i.status,
+      v.vendor_id,  -- Fetch vendor_id from the vendors table
+      v.stall_name  -- Fetch stall_name for display purposes
+    FROM items i
+    JOIN vendors v ON i.vendor_id = v.vendor_id  -- Join with vendors table
+    WHERE v.name = ? 
+    AND i.status != 'Unavailable'
   `;
 
   db.query(query, [storeName], (err, results) => {
@@ -2118,7 +1427,8 @@ app.get("/items/:storeName", (req, res) => {
         item_name: item.item_name,
         Price: item.Price,
         Category: item.Category,
-        vendor_username: item.vendor_username,
+        vendor_id: item.vendor_id, // Use vendor_id
+        stall_name: item.stall_name, // For display
         status: item.status,
         item_image: item.item_image
           ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
@@ -2213,6 +1523,47 @@ app.put("/orders/cancel/:orderId", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while cancelling order",
+      error: error.message,
+    });
+  }
+});
+
+// Delete favorite endpoint
+app.delete("/favorites/:favoriteItemId", async (req, res) => {
+  try {
+    const { favoriteItemId } = req.params;
+    console.log("Attempting to delete favorite item:", favoriteItemId);
+
+    const deleteQuery = "DELETE FROM favorites WHERE favorite_item_id = ?";
+
+    db.query(deleteQuery, [favoriteItemId], (err, result) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to remove favorite",
+          error: err.message,
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Favorite item not found",
+        });
+      }
+
+      console.log("Favorite removed successfully");
+      res.json({
+        success: true,
+        message: "Favorite removed successfully",
+      });
+    });
+  } catch (error) {
+    console.error("Server error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while removing favorite",
       error: error.message,
     });
   }

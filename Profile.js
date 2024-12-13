@@ -18,6 +18,7 @@ import { CommonActions } from "@react-navigation/native";
 import { API_URL } from "./config";
 import { useBasket } from "./BasketContext";
 import { BasketContext } from "./BasketContext";
+import axios from "axios";
 
 const Profile = ({ navigation, route }) => {
   const { username: initialUsername } = route.params;
@@ -238,7 +239,10 @@ const Profile = ({ navigation, route }) => {
   };
 
   const renderOrderItem = ({ item }) => {
-    console.log("Order status:", item.status);
+    if (item.status === "Order Received") {
+      return null;
+    }
+
     return (
       <View style={styles.orderCard}>
         <View style={styles.orderHeader}>
@@ -250,7 +254,7 @@ const Profile = ({ navigation, route }) => {
                 color:
                   item.status.toLowerCase() === "pending"
                     ? "#666666"
-                    : item.status.toLowerCase() === "paid"
+                    : item.status.toLowerCase() === "confirmed"
                     ? "#008000"
                     : "#FF0000",
               },
@@ -299,7 +303,13 @@ const Profile = ({ navigation, route }) => {
 
   const fetchFavorites = async (page = 1) => {
     try {
-      setLoading(true);
+      setLoadingFavorites(true);
+      const username = await AsyncStorage.getItem("username");
+      if (!username) {
+        console.error("No username found");
+        return;
+      }
+
       const response = await fetch(
         `${API_URL}/favorites/${username}?page=${page}`
       );
@@ -320,7 +330,7 @@ const Profile = ({ navigation, route }) => {
       console.error("Error fetching favorites:", error);
       Alert.alert("Error", "Failed to fetch favorites");
     } finally {
-      setLoading(false);
+      setLoadingFavorites(false);
       setRefreshing(false);
     }
   };
@@ -348,7 +358,8 @@ const Profile = ({ navigation, route }) => {
       item_name: item.item_name,
       Price: item.Price,
       item_image: item.item_image,
-      vendor_username: item.vendor_username,
+      vendor_id: item.vendor_id,
+      stall_name: item.stall_name,
       Category: item.Category,
       status: item.status,
     });
@@ -364,8 +375,10 @@ const Profile = ({ navigation, route }) => {
         Price: selectedItem.Price,
         item_image: selectedItem.item_image,
         quantity: parseInt(quantity),
-        vendor_username: selectedItem.vendor_username,
+        vendor_id: selectedItem.vendor_id,
+        stall_name: selectedItem.stall_name,
         Category: selectedItem.Category,
+        subtotal: selectedItem.Price * parseInt(quantity),
       };
 
       console.log("Adding to basket:", basketItem);
@@ -420,60 +433,44 @@ const Profile = ({ navigation, route }) => {
     }
   };
 
-  const removeFavorite = async (favoriteId) => {
-    // Show confirmation dialog
+  const removeFavorite = async (favoriteItemId) => {
     Alert.alert(
       "Remove Favorite",
-      "Are you sure you want to remove this favorite?",
+      "Are you sure you want to remove this item from favorites?",
       [
         {
           text: "Cancel",
           style: "cancel",
         },
         {
-          text: "Yes",
+          text: "Remove",
+          style: "destructive",
           onPress: async () => {
             try {
-              console.log("Attempting to remove favorite:", {
-                favoriteId,
-                username,
-              });
-
               const response = await fetch(
-                `${API_URL}/favorites/remove/${favoriteId}?username=${username}`,
+                `${API_URL}/favorites/${favoriteItemId}`,
                 {
                   method: "DELETE",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
                 }
               );
-
               const data = await response.json();
-              console.log("Remove favorite response:", data);
 
               if (data.success) {
-                // Remove the item from the favorites list
-                setFavorites(
-                  favorites.filter((item) => item.favorite_id !== favoriteId)
+                setFavorites((prevFavorites) =>
+                  prevFavorites.filter(
+                    (fav) => fav.favorite_item_id !== favoriteItemId
+                  )
                 );
-                Alert.alert("Success", "Item removed from favorites");
+                Alert.alert("Success", "Favorite removed successfully");
               } else {
                 Alert.alert(
                   "Error",
-                  data.message || "Failed to remove favorite",
-                  [
-                    {
-                      text: "OK",
-                      onPress: () => console.log("Detailed error:", data),
-                    },
-                  ]
+                  data.message || "Failed to remove favorite"
                 );
-                console.error("Failed to remove favorite:", data);
               }
             } catch (error) {
               console.error("Error removing favorite:", error);
-              Alert.alert("Error", "Failed to remove favorite");
+              Alert.alert("Error", "An error occurred while removing favorite");
             }
           },
         },
@@ -499,22 +496,20 @@ const Profile = ({ navigation, route }) => {
           </Text>
           <TouchableOpacity
             style={styles.removeButton}
-            onPress={() => removeFavorite(item.favorite_id)}
+            onPress={() => removeFavorite(item.favorite_item_id)}
           >
             <Text style={styles.removeButtonText}>✕</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.vendorName} numberOfLines={1}>
-          Vendor: {item.vendor_username}
+          Vendor: {item.stall_name}
         </Text>
         <Text style={styles.price}>₱{item.Price}</Text>
 
-        {/* Display Out of Stock label if status is Out of Stock */}
         {item.status === "Out of Stock" && (
           <Text style={styles.outOfStockText}>Out of Stock</Text>
         )}
 
-        {/* Only show Add to Basket button if item is Available */}
         <TouchableOpacity
           style={[
             styles.addToBasketButton,
@@ -607,10 +602,11 @@ const Profile = ({ navigation, route }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Username</Text>
+                <Text style={styles.inputLabel}>Name</Text>
                 <TextInput
                   style={styles.input}
                   value={username}
+                  editable={false}
                   onChangeText={setUsername}
                   placeholder="Enter username"
                   placeholderTextColor="#666"
@@ -731,9 +727,7 @@ const Profile = ({ navigation, route }) => {
                 <>
                   <FlatList
                     data={favorites}
-                    keyExtractor={(item, index) =>
-                      `${item.favorite_id}-${index}`
-                    }
+                    keyExtractor={(item) => item.favorite_item_id.toString()}
                     renderItem={renderItem}
                     contentContainerStyle={styles.favoritesList}
                     ListEmptyComponent={() => (
@@ -746,7 +740,7 @@ const Profile = ({ navigation, route }) => {
                     refreshing={refreshing}
                     onRefresh={handleRefresh}
                     ListFooterComponent={() =>
-                      loading && hasMore ? (
+                      loadingFavorites && hasMore ? (
                         <ActivityIndicator
                           size="large"
                           color="#800000"

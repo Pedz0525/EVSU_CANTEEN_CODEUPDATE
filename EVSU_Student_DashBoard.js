@@ -208,43 +208,26 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
 
       const favoriteData = {
         customer_id: username,
-        vendor_id: item.vendor_username,
+        vendor_id: item.vendor_id,
         item_name: item.item_name,
-        vendor_username: item.vendor_username,
-        Price: item.Price,
       };
 
-      console.log(
-        "Sending favorite data:",
-        JSON.stringify(favoriteData, null, 2)
-      );
+      const response = await fetch(`${API_URL}/favorites/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(favoriteData),
+      });
 
-      try {
-        const response = await fetch(`${API_URL}/favorites/create`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(favoriteData),
-        });
+      const result = await response.json();
 
-        const result = await response.json();
-        console.log("Server response:", result);
-
-        if (result.success) {
-          Alert.alert("Success", "Item added to favorites!");
-        } else {
-          // Check if the error is because item is already in favorites
-          if (result.message === "Item is already in favorites") {
-            Alert.alert("Info", "This item is already in your favorites!");
-          } else {
-            throw new Error(result.message || "Failed to add to favorites");
-          }
-        }
-      } catch (fetchError) {
-        console.error("Fetch error:", fetchError);
-        throw new Error(`Failed to add to favorites: ${fetchError.message}`);
+      if (result.success) {
+        Alert.alert("Success", "Item added to favorites!");
+      } else if (result.message === "Item is already in favorites") {
+        Alert.alert("Info", "This item is already in your favorites!");
+      } else {
+        throw new Error(result.message || "Failed to add to favorites");
       }
     } catch (error) {
       console.error("Favorite submission error:", error);
@@ -286,7 +269,7 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
         </Text>
         <Text style={styles.productPrice}>₱{item.Price}</Text>
         <Text style={styles.storeName} numberOfLines={1}>
-          {item.vendor_username}
+          {item.stall_name}
         </Text>
         {item.status === "Out of Stock" && (
           <Text style={styles.outOfStockText}>Out of Stock</Text>

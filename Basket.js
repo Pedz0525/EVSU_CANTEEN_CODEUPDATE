@@ -48,7 +48,7 @@ const Basket = () => {
 
       // Group items by vendor and combine similar items
       const itemsByVendor = basket.reduce((acc, item) => {
-        const vendorId = item.vendor_username;
+        const vendorId = item.vendor_id;
         if (!acc[vendorId]) {
           acc[vendorId] = [];
         }
@@ -58,7 +58,7 @@ const Basket = () => {
           (existingItem) =>
             existingItem.item_name === item.item_name &&
             existingItem.Price === item.Price &&
-            existingItem.vendor_username === item.vendor_username
+            existingItem.vendor_id === item.vendor_id
         );
 
         if (existingItemIndex !== -1) {
@@ -70,7 +70,7 @@ const Basket = () => {
             id: item.id || item.item_id,
             quantity: parseInt(item.quantity),
             Price: parseFloat(item.Price),
-            vendor_username: item.vendor_username,
+            vendor_id: item.vendor_id,
             item_name: item.item_name,
           });
         }
@@ -180,7 +180,7 @@ const Basket = () => {
       <Image source={{ uri: item.item_image }} style={styles.itemImage} />
       <View style={styles.itemDetails}>
         <Text style={styles.itemName}>{item.item_name}</Text>
-        <Text style={styles.vendorName}>Vendor: {item.vendor_username}</Text>
+        <Text style={styles.vendorName}>Vendor: {item.stall_name}</Text>
         <View style={styles.quantityContainer}>
           <Text style={styles.itemPrice}>₱{item.Price}</Text>
           <TouchableOpacity
