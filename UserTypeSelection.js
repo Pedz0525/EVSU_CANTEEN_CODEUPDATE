@@ -20,7 +20,7 @@ export default function UserTypeSelection({ navigation }) {
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={styles.button}
-            onPress={() => navigation.navigate("VendorDashboard")}
+            onPress={() => navigation.navigate("VendorLogin")}
           >
             <Text style={styles.buttonText}>VENDOR</Text>
           </TouchableOpacity>

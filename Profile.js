@@ -65,7 +65,7 @@ const Profile = ({ navigation, route }) => {
       // Navigate to Login
       navigation.reset({
         index: 0,
-        routes: [{ name: "Login" }],
+        routes: [{ name: "UserTypeSelection" }],
       });
     } catch (error) {
       console.error("Logout error:", error);

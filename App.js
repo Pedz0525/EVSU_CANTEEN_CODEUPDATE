@@ -14,6 +14,15 @@ import VendorDashboard from "./VendorDashboard";
 import StoreProduct from "./StoreProduct";
 import Basket from "./Basket";
 import { BasketProvider } from "./BasketContext";
+import Vendor_Dashboard from "./Vendor_Dashboard";
+import ProfileUpload from "./ProfileUpload";
+import Vendor_Add_Item from "./Vendor_Add_Item";
+import EditItem from "./EditItem";
+import Vendor_Profile from "./Vendor_Profile";
+import Vendor_Order from "./Vendor_Order";
+import Vendor_Sign_up from "./Vendor_Sign_up";
+import Vendor_Login from "./Vendor_Login";
+
 const Stack = createStackNavigator();
 
 export default function App() {
@@ -67,7 +76,7 @@ export default function App() {
             options={{ headerShown: false }}
           />
           <Stack.Screen
-            name="VendorDashboard"
+            name="Vendor_Dashboard"
             component={VendorDashboard}
             options={{ headerShown: false }}
           />
@@ -79,6 +88,46 @@ export default function App() {
           <Stack.Screen
             name="Basket"
             component={Basket}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="VendorLogin"
+            component={Vendor_Login}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Vendor"
+            component={Vendor_Dashboard}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ProfileUpload"
+            component={ProfileUpload}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AddItem"
+            component={Vendor_Add_Item}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EditItem"
+            component={EditItem}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="VendorProfile"
+            component={Vendor_Profile}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="VendorOrder"
+            component={Vendor_Order}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="VendorSignUp"
+            component={Vendor_Sign_up}
             options={{ headerShown: false }}
           />
         </Stack.Navigator>
