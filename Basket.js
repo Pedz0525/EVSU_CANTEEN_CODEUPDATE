@@ -8,6 +8,9 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  TextInput,
+  ScrollView,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useBasket } from "./BasketContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -20,6 +23,23 @@ const Basket = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [showQuantityModal, setShowQuantityModal] = useState(false);
   const [tempQuantity, setTempQuantity] = useState("1");
+  const [deliveryMode, setDeliveryMode] = useState(null);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [deliveryLocation, setDeliveryLocation] = useState("");
+  const [deliveryDetails, setDeliveryDetails] = useState("");
+
+  const evsuLocations = [
+    "EVSU Main Campus",
+    "College of Technology Building",
+    "College of Education Building",
+    "College of Engineering Building",
+    "College of Arts and Sciences Building",
+    "College of Business and Entrepreneurship Building",
+    "EVSU Library",
+    "EVSU Gymnasium",
+    "EVSU Admin Building",
+    "Student Center"
+  ];
 
   const calculateTotal = () => {
     return basket
@@ -35,7 +55,36 @@ const Basket = () => {
     return (parseFloat(price) * parseInt(quantity)).toFixed(2);
   };
 
+  const calculateFinalTotal = () => {
+    const subtotal = parseFloat(calculateTotal());
+    return deliveryMode === 'delivery' ? (subtotal + 15).toFixed(2) : subtotal.toFixed(2);
+  };
+
   const submitOrder = async () => {
+    // Check if delivery mode is selected first
+    if (!deliveryMode) {
+      Alert.alert(
+        "Select Mode of Receiving",
+        "Please select how you want to receive your order first.",
+        [
+          {
+            text: "OK",
+            onPress: () => setShowDeliveryModal(true)
+          }
+        ]
+      );
+      return;
+    }
+
+    if (deliveryMode === 'delivery' && !deliveryLocation.trim()) {
+      Alert.alert(
+        "Delivery Address Required",
+        "Please enter your delivery address.",
+        [{ text: "OK", onPress: () => setShowDeliveryModal(true) }]
+      );
+      return;
+    }
+
     try {
       const username = await AsyncStorage.getItem("username");
       if (!username) {
@@ -85,8 +134,11 @@ const Basket = () => {
           total_price: items.reduce(
             (total, item) => total + parseFloat(item.Price) * item.quantity,
             0
-          ),
+          ) + (deliveryMode === 'delivery' ? 15 : 0),
           status: "pending",
+          delivery_mode: deliveryMode,
+          delivery_location: deliveryLocation,
+          delivery_details: deliveryDetails,
           items: items,
         };
 
@@ -111,6 +163,7 @@ const Basket = () => {
 
           if (result.success) {
             clearBasket();
+            setDeliveryMode(null); // Reset delivery mode after successful order
             Alert.alert("Success", "Order placed successfully!", [
               { text: "OK" },
             ]);
@@ -260,6 +313,63 @@ const Basket = () => {
     </Modal>
   );
 
+  const DeliveryModal = () => (
+    <Modal visible={showDeliveryModal} transparent={true} animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Select Mode of Receiving</Text>
+          
+          <TouchableOpacity 
+            style={[
+              styles.deliveryOption,
+              deliveryMode === 'pickup' && styles.selectedDeliveryOption
+            ]}
+            onPress={() => {
+              setDeliveryMode('pickup');
+              setShowDeliveryModal(false);
+            }}
+          >
+            <Text style={[
+              styles.deliveryOptionText,
+              deliveryMode === 'pickup' && styles.selectedDeliveryOptionText
+            ]}>Get on Store</Text>
+            <Text style={[
+              styles.deliveryPrice,
+              deliveryMode === 'pickup' && styles.selectedDeliveryOptionText
+            ]}>₱{calculateTotal()}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[
+              styles.deliveryOption,
+              deliveryMode === 'delivery' && styles.selectedDeliveryOption
+            ]}
+            onPress={() => {
+              setDeliveryMode('delivery');
+              setShowDeliveryModal(false);
+            }}
+          >
+            <Text style={[
+              styles.deliveryOptionText,
+              deliveryMode === 'delivery' && styles.selectedDeliveryOptionText
+            ]}>Delivery</Text>
+            <Text style={[
+              styles.deliveryPrice,
+              deliveryMode === 'delivery' && styles.selectedDeliveryOptionText
+            ]}>₱{calculateTotal()} + ₱15</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.modalButton, styles.cancelButton]}
+            onPress={() => setShowDeliveryModal(false)}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -282,9 +392,44 @@ const Basket = () => {
           />
           <View style={styles.totalContainer}>
             <Text style={styles.totalLabel}>Total Items: {basket.length}</Text>
+            
+            <TouchableOpacity 
+              style={styles.deliveryModeButton}
+              onPress={() => setShowDeliveryModal(true)}
+            >
+              <Text style={styles.deliveryModeText}>
+                {deliveryMode ? 
+                  (deliveryMode === 'pickup' ? 'Get on Store' : 'Delivery (+₱15)') : 
+                  'Select Mode of Receiving'}
+              </Text>
+            </TouchableOpacity>
+
+            {deliveryMode === 'delivery' && (
+              <View style={styles.deliveryDetailsContainer}>
+                <TextInput
+                  style={styles.locationInput}
+                  value={deliveryLocation}
+                  onChangeText={setDeliveryLocation}
+                  placeholder="Enter your EVSU area location"
+                  multiline={true}
+                  numberOfLines={3}
+                />
+                
+                <TextInput
+                  style={styles.locationInput}
+                  value={deliveryDetails}
+                  onChangeText={setDeliveryDetails}
+                  placeholder="Additional details (optional)"
+                  multiline={true}
+                  numberOfLines={2}
+                />
+              </View>
+            )}
+
             <Text style={styles.totalText}>
-              Total Amount: ₱{calculateTotal()}
+              Total Amount: ₱{calculateFinalTotal()}
             </Text>
+            
             <TouchableOpacity
               style={styles.checkoutButton}
               onPress={submitOrder}
@@ -300,6 +445,7 @@ const Basket = () => {
       )}
 
       <QuantityModal />
+      <DeliveryModal />
     </View>
   );
 };
@@ -466,17 +612,18 @@ const styles = StyleSheet.create({
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   modalContent: {
-    backgroundColor: "white",
+    backgroundColor: 'white',
+    borderRadius: 20,
     padding: 20,
-    borderRadius: 15,
-    width: "80%",
-    alignItems: "center",
+    width: '90%',
+    maxHeight: '80%',
+    alignItems: 'center',
   },
 
   modalTitle: {
@@ -509,9 +656,10 @@ const styles = StyleSheet.create({
   },
 
   modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 10,
   },
 
   modalButton: {
@@ -521,24 +669,83 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
 
-  cancelButton: {
-    backgroundColor: "#cccccc",
-  },
-
   confirmButton: {
-    backgroundColor: "#800000",
+    backgroundColor: '#800000',
   },
 
-  cancelButtonText: {
-    color: "#333333",
-    textAlign: "center",
-    fontWeight: "bold",
+  cancelButton: {
+    backgroundColor: '#f5f5f5',
   },
 
   confirmButtonText: {
-    color: "white",
-    textAlign: "center",
-    fontWeight: "bold",
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+
+  cancelButtonText: {
+    color: '#333',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+
+  deliveryOption: {
+    backgroundColor: '#f5f5f5',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  selectedDeliveryOption: {
+    backgroundColor: '#800000',
+  },
+
+  deliveryOptionText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+
+  deliveryPrice: {
+    fontSize: 14,
+    color: '#666',
+  },
+
+  deliveryModeButton: {
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+
+  deliveryModeText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#800000',
+    fontWeight: 'bold',
+  },
+
+  deliveryDetailsContainer: {
+    width: '100%',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+
+  locationInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    minHeight: 60,
+    fontSize: 16,
+    color: '#000',
   },
 });
 

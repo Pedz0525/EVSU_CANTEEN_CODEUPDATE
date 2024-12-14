@@ -120,7 +120,12 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
       }
       const data = await response.json();
       if (data.success) {
-        setSearchResults(data.items);
+        // Make sure each item has all required properties
+        const processedResults = data.items.map(item => ({
+          ...item,
+          stall_name: item.stall_name || 'Unknown Stall' // Fallback value if stall_name is missing
+        }));
+        setSearchResults(processedResults);
       }
     } catch (error) {
       console.error("Search error:", error);
@@ -255,28 +260,23 @@ const EVSU_Student_DashBoard = ({ navigation, route }) => {
 
   const renderProductItem = (item, index) => (
     <View key={index} style={styles.productItem}>
-      {/* Left: Image */}
       <Image
         source={{ uri: item.item_image }}
         style={styles.productImage}
         resizeMode="cover"
       />
-
-      {/* Middle: Details */}
       <View style={styles.productDetails}>
         <Text style={styles.productName} numberOfLines={1}>
           {item.item_name}
         </Text>
         <Text style={styles.productPrice}>₱{item.Price}</Text>
         <Text style={styles.storeName} numberOfLines={1}>
-          {item.stall_name}
+          {item.stall_name || 'Unknown Stall'}
         </Text>
         {item.status === "Out of Stock" && (
           <Text style={styles.outOfStockText}>Out of Stock</Text>
         )}
       </View>
-
-      {/* Right: Action Buttons */}
       <View style={styles.actionButtons}>
         <TouchableOpacity
           style={styles.heartIconButton}

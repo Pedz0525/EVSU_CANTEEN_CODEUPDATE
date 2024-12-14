@@ -11,6 +11,7 @@ import {
   FlatList,
   ActivityIndicator,
   Platform,
+  ScrollView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -41,6 +42,12 @@ const Profile = ({ navigation, route }) => {
   const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { clearBasket } = useContext(BasketContext);
+  const [name, setName] = useState("");
+  const [displayUsername, setDisplayUsername] = useState(initialUsername);
+  const [initialName, setInitialName] = useState("");
+  const [isProfileImageChanged, setIsProfileImageChanged] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
 
   const handleAccountSettings = () => {
     setShowEditProfile(true);
@@ -55,7 +62,7 @@ const Profile = ({ navigation, route }) => {
       // Clear the basket
       clearBasket();
 
-      // Clear AsyncStorage
+      // Clear AsyncStorage 
       await AsyncStorage.multiRemove([
         "username",
         "userType",
@@ -93,6 +100,7 @@ const Profile = ({ navigation, route }) => {
       if (!result.canceled) {
         const source = { uri: result.assets[0].uri };
         setProfileImage(source);
+        setIsProfileImageChanged(true);
         console.log("Image set successfully:", source);
       }
     } catch (error) {
@@ -126,8 +134,26 @@ const Profile = ({ navigation, route }) => {
     }
   };
 
+  const fetchUserProfile = async () => {
+    try {
+      const response = await fetch(`${API_URL}/customer/profile/${encodeURIComponent(username)}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.success) {
+        setName(data.name || "");
+        setInitialName(data.name || "");
+        setDisplayUsername(data.username || initialUsername);
+      }
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+    }
+  };
+
   useEffect(() => {
     if (username) {
+      fetchUserProfile();
       fetchProfileImage();
     }
   }, [username]);
@@ -137,68 +163,45 @@ const Profile = ({ navigation, route }) => {
       setIsLoading(true);
       console.log("Starting profile update...");
 
-      const formData = new FormData();
-      formData.append("username", username);
+      if (isProfileImageChanged && profileImage) {
+        const formData = new FormData();
+        formData.append("username", username);
 
-      if (password) {
-        formData.append("password", password);
-      }
-
-      // Handle image
-      if (profileImage && profileImage.uri) {
-        // Get the file extension
-        const uriParts = profileImage.uri.split(".");
+        // Create file object from image uri
+        const uriParts = profileImage.uri.split('.');
         const fileType = uriParts[uriParts.length - 1];
 
-        // Create file name
-        const fileName = `profile_${Date.now()}.${fileType}`;
-
-        // Create file object
-        const file = {
-          uri:
-            Platform.OS === "ios"
-              ? profileImage.uri.replace("file://", "")
-              : profileImage.uri,
+        formData.append("profileImage", {
+          uri: profileImage.uri,
           type: `image/${fileType}`,
-          name: fileName,
-        };
+          name: `profile.${fileType}`,
+        });
 
-        formData.append("profileImage", file);
+        const response = await fetch(`${API_URL}/customer/profile/update-photo`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'multipart/form-data',
+          },
+          body: formData
+        });
 
-        console.log("Appending image:", file);
-      }
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-      console.log("FormData prepared:", formData);
-
-      const response = await fetch(`${API_URL}/customer/profile/update`, {
-        method: "POST",
-        body: formData,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("Profile update response:", data);
-
-      if (data.success) {
-        Alert.alert("Success", "Profile updated successfully");
-        setShowEditProfile(false);
-        fetchProfileImage(); // Refresh the profile image
-      } else {
-        Alert.alert("Error", data.message || "Failed to update profile");
+        const data = await response.json();
+        
+        if (data.success) {
+          Alert.alert("Success", "Profile photo updated successfully");
+          setIsProfileImageChanged(false);
+        } else {
+          Alert.alert("Error", data.message || "Failed to update profile photo");
+        }
       }
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert(
-        "Error",
-        "Failed to update profile. Please check your connection and try again."
-      );
+      Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -532,6 +535,80 @@ const Profile = ({ navigation, route }) => {
     </View>
   );
 
+  const handleUpdateUsername = async () => {
+    try {
+      setIsLoading(true);
+      console.log("Updating username from:", username, "to:", newUsername);
+
+      const response = await fetch(`${API_URL}/customer/profile/update-username`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          currentUsername: username,
+          newUsername: newUsername
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        Alert.alert("Success", "Username updated successfully");
+        // Update the stored username in AsyncStorage
+        await AsyncStorage.setItem("username", newUsername);
+        setUsername(newUsername);
+        setDisplayUsername(newUsername);
+      } else {
+        Alert.alert("Error", data.message || "Failed to update username");
+      }
+    } catch (error) {
+      console.error("Error updating username:", error);
+      Alert.alert("Error", "Failed to update username. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    try {
+      setIsLoading(true);
+      console.log("Updating password for user:", username);
+
+      if (!password || password.trim() === "") {
+        Alert.alert("Error", "Please enter a new password");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/customer/profile/update-password`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: username,
+          password: password
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        Alert.alert("Success", "Password updated successfully");
+        setPassword(""); // Clear the password field
+      } else {
+        Alert.alert("Error", data.message || "Failed to update password");
+      }
+    } catch (error) {
+      console.error("Error updating password:", error);
+      Alert.alert("Error", "Failed to update password. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -580,59 +657,97 @@ const Profile = ({ navigation, route }) => {
 
         <View style={styles.menuContainer}>
           {showEditProfile ? (
-            <View>
-              <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                <Text style={styles.backButtonText}>← Back</Text>
-              </TouchableOpacity>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                  <Text style={styles.backButtonText}>← Back</Text>
+                </TouchableOpacity>
 
-              <View style={styles.profilePhotoContainer}>
-                <Image
-                  source={profileImage || require("./assets/placeholder.png")}
-                  style={styles.profilePhoto}
-                  resizeMode="cover"
-                />
+                <View style={styles.profilePhotoContainer}>
+                  <Image
+                    source={profileImage || require("./assets/placeholder.png")}
+                    style={styles.profilePhoto}
+                    resizeMode="cover"
+                  />
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={() => selectImage(true)}
+                  >
+                    <Text style={styles.uploadButtonText}>
+                      {profileImage ? "Change Photo" : "Upload Photo"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={displayUsername}
+                    editable={false}
+                    placeholder="Username"
+                    placeholderTextColor="#666"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Username</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={newUsername}
+                    onChangeText={setNewUsername}
+                    placeholder="Enter new username"
+                    placeholderTextColor="#666"
+                  />
+                  <TouchableOpacity
+                    style={[styles.saveButton, isLoading && styles.disabledButton]}
+                    onPress={handleUpdateUsername}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.saveButtonText}>
+                      {isLoading ? "Updating..." : "Update Username"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>New Password</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Enter new password"
+                    placeholderTextColor="#666"
+                    secureTextEntry={true}
+                  />
+                  <TouchableOpacity
+                    style={[styles.saveButton, isLoading && styles.disabledButton]}
+                    onPress={handleUpdatePassword}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.saveButtonText}>
+                      {isLoading ? "Updating..." : "Update Password"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity
-                  style={styles.uploadButton}
-                  onPress={() => selectImage(true)}
+                  style={[styles.saveButton, isLoading && styles.disabledButton]}
+                  disabled={isLoading}
+                  onPress={saveProfile}
                 >
-                  <Text style={styles.uploadButtonText}>
-                    {profileImage ? "Change Photo" : "Upload Photo"}
+                  <Text style={styles.saveButtonText}>
+                    {isLoading ? "Saving..." : 
+                     isProfileImageChanged ? "Save Photo" :
+                     password ? "Save Password" :
+                     name !== initialName ? "Save Name" :
+                     "Save Profile"}
                   </Text>
                 </TouchableOpacity>
-              </View>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={username}
-                  editable={false}
-                  onChangeText={setUsername}
-                  placeholder="Enter username"
-                  placeholderTextColor="#666"
-                />
+                <View style={{ height: 20 }} />
               </View>
-
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Password</Text>
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter password"
-                  placeholderTextColor="#666"
-                  secureTextEntry={true}
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[styles.saveButton, isLoading && styles.disabledButton]}
-                disabled={isLoading}
-                onPress={saveProfile}
-              >
-                <Text style={styles.saveButtonText}>Save Profile</Text>
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
           ) : (
             <View>
               <View style={styles.profilePhotoContainer}>
@@ -900,6 +1015,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 20,
     width: "90%",
+    maxHeight: '80%',
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -956,17 +1072,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   inputLabel: {
     fontSize: 16,
     color: "#333",
     marginBottom: 5,
+    fontWeight: "bold",
   },
   input: {
     backgroundColor: "#fff",
-    padding: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#ddd",
     fontSize: 16,
   },
   saveButton: {
@@ -1000,29 +1120,100 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalScrollView: {
+    flex: 1,
   },
   modalContent: {
-    backgroundColor: "rgba(59, 59, 59, 0.62)",
-    height: "90%",
+    backgroundColor: 'white',
+    marginTop: 50, // Give some space at the top
+    marginBottom: 20, // Space at the bottom
     marginHorizontal: 20,
     borderRadius: 20,
     padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#800000",
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   closeButton: {
-    padding: 10,
+    position: 'absolute',
+    right: 15,
+    top: 15,
     zIndex: 1,
+    padding: 5,
   },
   closeButtonText: {
-    color: "#fff",
     fontSize: 24,
-    fontWeight: "bold",
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  profilePhotoContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  profilePhoto: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 10,
+  },
+  uploadButton: {
+    backgroundColor: '#800000',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+  },
+  uploadButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  saveButton: {
+    backgroundColor: '#800000',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   ordersList: {
     paddingBottom: 20,

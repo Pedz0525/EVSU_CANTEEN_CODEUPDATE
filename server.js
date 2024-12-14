@@ -4,11 +4,11 @@ const cors = require("cors");
 const nodemailer = require("nodemailer");
 const multer = require("multer");
 const fs = require("fs").promises;
-const sharp = require("sharp");
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
+const sharp = require('sharp');
 
-const API_URL = process.env.API_URL || "http://192.168.254.107:3000"; // Replace with your actual IP and port
+const API_URL = process.env.API_URL || "http://192.168.254.121:3000"; // Replace with your actual IP and port
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -20,7 +20,7 @@ const upload = multer({
 const app = express();
 app.use(
   cors({
-    origin: ["http://192.168.254.107:3000", "http://localhost:3000"],
+    origin: ["http://192.168.25.121:3000", "http://localhost:3000"],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   })
@@ -140,40 +140,64 @@ app.post("/login", async (req, res) => {
 
 // Add this new endpoint
 // Update the signup endpoint
+// Update the signup endpoint
 app.post("/signup", upload.single("profile_image"), async (req, res) => {
   try {
-    const { name, username, email, password } = req.body;
-    const profile_image = req.file ? req.file.buffer : null;
+    console.log("Received signup request:", {
+      body: req.body,
+      file: req.file ? "File received" : "No file"
+    });
 
-    // Check if username already exists
-    const checkUsername = "SELECT * FROM customers WHERE username = ?";
-    db.query(checkUsername, [username], (err, results) => {
+    const { name, username, email, password } = req.body;
+
+    // Validate required fields
+    if (!name || !username || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required"
+      });
+    }
+
+    // Check if username or email already exists
+    const checkExisting = "SELECT * FROM customers WHERE username = ? OR email = ?";
+    db.query(checkExisting, [username, email], async (err, results) => {
       if (err) {
         console.error("Database error:", err);
-        return res.json({
+        return res.status(500).json({
           success: false,
-          message: "Database error",
+          message: "Database error"
         });
       }
 
       if (results.length > 0) {
-        return res.json({
+        return res.status(400).json({
           success: false,
-          message: "Username already exists",
+          message: "Username or email already exists"
         });
       }
 
-      // Hash password
-      bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
-        if (hashErr) {
-          console.error("Hash error:", hashErr);
-          return res.json({
-            success: false,
-            message: "Error hashing password",
-          });
+      try {
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+        // Process profile image if exists
+        let profileImageBuffer = null;
+        if (req.file) {
+          try {
+            profileImageBuffer = await sharp(req.file.buffer)
+              .resize(800, 800, { fit: 'inside' })
+              .jpeg({ quality: 80 })
+              .toBuffer();
+          } catch (imageError) {
+            console.error("Image processing error:", imageError);
+            return res.status(500).json({
+              success: false,
+              message: "Error processing image"
+            });
+          }
         }
 
-        // Insert new user with profile image
+        // Insert new user
         const insertUser = `
           INSERT INTO customers 
           (name, username, email, password, profile_image) 
@@ -182,29 +206,38 @@ app.post("/signup", upload.single("profile_image"), async (req, res) => {
 
         db.query(
           insertUser,
-          [name, username, email, hashedPassword, profile_image],
+          [name, username, email, hashedPassword, profileImageBuffer],
           (insertErr, result) => {
             if (insertErr) {
               console.error("Insert error:", insertErr);
-              return res.json({
+              return res.status(500).json({
                 success: false,
                 message: "Error creating account",
+                error: insertErr.message
               });
             }
 
+            console.log("Account created successfully");
             res.json({
               success: true,
-              message: "Account created successfully",
+              message: "Account created successfully"
             });
           }
         );
-      });
+      } catch (hashError) {
+        console.error("Password hashing error:", hashError);
+        return res.status(500).json({
+          success: false,
+          message: "Error processing password"
+        });
+      }
     });
   } catch (error) {
     console.error("Server error:", error);
-    res.json({
+    res.status(500).json({
       success: false,
       message: "Server error",
+      error: error.message
     });
   }
 });
@@ -642,99 +675,99 @@ app.get("/customer/profile/:username", (req, res) => {
   });
 });
 
-app.post(
-  "/customer/profile/update",
-  upload.single("profileImage"),
-  async (req, res) => {
-    try {
-      const { username, password } = req.body;
-      console.log("Received update request for:", username);
-      console.log("Password received:", password ? "Yes" : "No");
-      console.log("File received:", req.file ? "Yes" : "No");
+// app.post(
+//   "/customer/profile/update",
+//   upload.single("profileImage"),
+//   async (req, res) => {
+//     try {
+//       const { username, password } = req.body;
+//       console.log("Received update request for:", username);
+//       console.log("Password received:", password ? "Yes" : "No");
+//       console.log("File received:", req.file ? "Yes" : "No");
 
-      if (!password || password.trim() === "") {
-        return res.status(400).json({
-          success: false,
-          message: "Password is required for profile update",
-        });
-      }
+//       if (!password || password.trim() === "") {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Password is required for profile update",
+//         });
+//       }
 
-      // Hash the password
-      const hashedPassword = await bcrypt.hash(password, 10);
-      console.log("Password hashed successfully");
+//       // Hash the password
+//       const hashedPassword = await bcrypt.hash(password, 10);
+//       console.log("Password hashed successfully");
 
-      // Prepare image data if provided
-      let imageBuffer = null;
-      if (req.file) {
-        // Optimize image before saving
-        imageBuffer = await sharp(req.file.buffer)
-          .resize(800, 800, { fit: "inside", withoutEnlargement: true })
-          .jpeg({ quality: 80 })
-          .toBuffer();
-      }
+//       // Prepare image data if provided
+//       let imageBuffer = null;
+//       if (req.file) {
+//         // Optimize image before saving
+//         imageBuffer = await sharp(req.file.buffer)
+//           .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+//           .jpeg({ quality: 80 })
+//           .toBuffer();
+//       }
 
-      // Create a new connection for this operation
-      const updateConnection = mysql.createConnection({
-        host: "localhost",
-        user: "root",
-        password: "",
-        database: "evsu_canteen",
-        connectTimeout: 60000,
-        maxPacketSize: 16777216,
-      });
+//       // Create a new connection for this operation
+//       const updateConnection = mysql.createConnection({
+//         host: "localhost",
+//         user: "root",
+//         password: "",
+//         database: "evsu_canteen",
+//         connectTimeout: 60000,
+//         maxPacketSize: 16777216,
+//       });
 
-      updateConnection.connect();
+//       updateConnection.connect();
 
-      let updateQuery = "UPDATE customers SET password = ?";
-      let queryParams = [hashedPassword];
+//       let updateQuery = "UPDATE customers SET password = ?";
+//       let queryParams = [hashedPassword];
 
-      if (imageBuffer) {
-        updateQuery += ", profile_image = ?";
-        queryParams.push(imageBuffer);
-      }
+//       if (imageBuffer) {
+//         updateQuery += ", profile_image = ?";
+//         queryParams.push(imageBuffer);
+//       }
 
-      updateQuery += " WHERE name = ?";
-      queryParams.push(username);
+//       updateQuery += " WHERE name = ?";
+//       queryParams.push(username);
 
-      console.log("Executing query:", updateQuery);
-      console.log("Number of parameters:", queryParams.length);
+//       console.log("Executing query:", updateQuery);
+//       console.log("Number of parameters:", queryParams.length);
 
-      updateConnection.query(updateQuery, queryParams, (err, result) => {
-        // Close the temporary connection
-        updateConnection.end();
+//       updateConnection.query(updateQuery, queryParams, (err, result) => {
+//         // Close the temporary connection
+//         updateConnection.end();
 
-        if (err) {
-          console.error("Update error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to update profile",
-            error: err.message,
-          });
-        }
+//         if (err) {
+//           console.error("Update error:", err);
+//           return res.status(500).json({
+//             success: false,
+//             message: "Failed to update profile",
+//             error: err.message,
+//           });
+//         }
 
-        if (result.affectedRows === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "User not found",
-          });
-        }
+//         if (result.affectedRows === 0) {
+//           return res.status(404).json({
+//             success: false,
+//             message: "User not found",
+//           });
+//         }
 
-        console.log("Update successful. Rows affected:", result.affectedRows);
-        res.json({
-          success: true,
-          message: "Profile updated successfully",
-        });
-      });
-    } catch (error) {
-      console.error("Server error:", error);
-      res.status(500).json({
-        success: false,
-        message: "Server error while updating profile",
-        error: error.message,
-      });
-    }
-  }
-);
+//         console.log("Update successful. Rows affected:", result.affectedRows);
+//         res.json({
+//           success: true,
+//           message: "Profile updated successfully",
+//         });
+//       });
+//     } catch (error) {
+//       console.error("Server error:", error);
+//       res.status(500).json({
+//         success: false,
+//         message: "Server error while updating profile",
+//         error: error.message,
+//       });
+//     }
+//   }
+// );
 
 app.get("/orders/create", (req, res) => {
   res.json({ message: "Orders API is working" });
@@ -981,79 +1014,61 @@ app.get("/orders/:username", async (req, res) => {
   }
 });
 
-app.get("/search", async (req, res) => {
-  try {
-    const { query } = req.query;
+app.get("/search", (req, res) => {
+  const query = req.query.query;
+  
+  const searchQuery = `
+    SELECT 
+      i.item_id,
+      i.item_name,
+      i.item_image,
+      i.Price,
+      i.Category,
+      i.status,
+      v.vendor_id,
+      v.stall_name  -- Include stall_name in the selection
+    FROM items i
+    JOIN vendors v ON i.vendor_id = v.vendor_id  -- Join with vendors table
+    WHERE i.item_name LIKE ? AND i.status != 'Unavailable'
+  `;
 
-    const searchQuery = `
-      SELECT 
-        item_id,
-        item_name, 
-        item_image, 
-        Price, 
-        vendor_id,
-        status
-      FROM items
-      WHERE 
-        item_name LIKE ? 
-        AND status != 'Unavailable'
-      ORDER BY 
-        CASE 
-          WHEN status = 'Available' THEN 1
-          WHEN status = 'Out of Stock' THEN 2
-        END
-    `;
+  db.query(searchQuery, [`%${query}%`], (err, results) => {
+    if (err) {
+      console.error("Search error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Error performing search",
+        error: err.message
+      });
+    }
 
-    db.query(searchQuery, [`%${query}%`], (err, results) => {
-      if (err) {
-        console.error("Search error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Error searching items",
-        });
-      }
+    try {
+      const itemsWithImages = results.map(item => ({
+        item_id: item.item_id,
+        item_name: item.item_name,
+        Price: item.Price,
+        Category: item.Category,
+        vendor_id: item.vendor_id,
+        stall_name: item.stall_name, // Include stall_name in the response
+        status: item.status,
+        item_image: item.item_image 
+          ? `data:image/jpeg;base64,${item.item_image.toString('base64')}` 
+          : null
+      }));
 
-      try {
-        // Convert binary image data to base64 and include status
-        const itemsWithImages = results.map((item) => ({
-          item_id: item.item_id,
-          item_name: item.item_name,
-          item_image: item.item_image
-            ? `data:image/jpeg;base64,${item.item_image.toString("base64")}`
-            : null,
-          Price: item.Price,
-          vendor_id: item.vendor_id,
-          status: item.status,
-        }));
-
-        console.log(
-          `Found ${itemsWithImages.length} items matching "${query}"`,
-          itemsWithImages.map((item) => ({
-            name: item.item_name,
-            status: item.status,
-          }))
-        );
-
-        res.json({
-          success: true,
-          items: itemsWithImages,
-        });
-      } catch (error) {
-        console.error("Error processing images:", error);
-        res.status(500).json({
-          success: false,
-          message: "Error processing images",
-          error: error.message,
-        });
-      }
-    });
-  } catch (error) {
-    console.error("Server error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error while searching",
-    });
-  }
+      res.json({
+        success: true,
+        items: itemsWithImages
+      });
+    } catch (error) {
+      console.error("Error processing search results:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error processing search results",
+        error: error.message
+      });
+    }
+  });
 });
 
 // Vendor login endpoint with password hashing
@@ -1067,15 +1082,20 @@ app.use((req, res, next) => {
 });
 
 // Configure multer for image upload
+// Remove the Sharp import if it exists
+
+// Modify the multer configuration to store files directly
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, 'uploads/');
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, "profile-" + uniqueSuffix + path.extname(file.originalname));
-  },
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
 });
+
+
 
 // Profile update endpoint
 
@@ -2178,5 +2198,297 @@ app.post("/vendor-signup", upload.single("profile_image"), async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Update Name
+app.post("/customer/profile/update-name", async (req, res) => {
+  try {
+    const { username, name } = req.body;
+    console.log("Received name update request for:", username);
+
+    if (!name || name.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Name cannot be empty",
+      });
+    }
+
+    const updateQuery = "UPDATE customers SET name = ? WHERE username = ?";
+    
+    db.query(updateQuery, [name, username], (err, result) => {
+      if (err) {
+        console.error("Name update error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to update name",
+          error: err.message,
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      console.log("Name update successful for:", username);
+      res.json({
+        success: true,
+        message: "Name updated successfully",
+      });
+    });
+  } catch (error) {
+    console.error("Server error during name update:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating name",
+    });
+  }
+});
+
+// Update Password
+app.post("/customer/profile/update-password", express.json(), async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    console.log("Received password update request for:", username);
+
+    if (!password || password.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Password cannot be empty"
+      });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("Password hashed successfully");
+
+    const updateQuery = "UPDATE customers SET password = ? WHERE name = ?";
+    
+    db.query(updateQuery, [hashedPassword, username], (err, result) => {
+      if (err) {
+        console.error("Password update error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to update password",
+          error: err.message
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      console.log("Password updated successfully for:", username);
+      res.json({
+        success: true,
+        message: "Password updated successfully"
+      });
+    });
+  } catch (error) {
+    console.error("Server error during password update:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating password"
+    });
+  }
+});
+
+// Update Profile Photo
+app.post("/customer/profile/update-photo", upload.single("profileImage"), async (req, res) => {
+  try {
+    const { username } = req.body;
+    console.log("Received photo update request for:", username);
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No image file provided"
+      });
+    }
+
+    // Process image with sharp
+    let imageBuffer;
+    try {
+      imageBuffer = await sharp(req.file.buffer)
+        .resize(800, 800, {
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+    } catch (sharpError) {
+      console.error("Image processing error:", sharpError);
+      return res.status(500).json({
+        success: false,
+        message: "Error processing image"
+      });
+    }
+
+    // Update the profile image in database
+    const updateQuery = "UPDATE customers SET profile_image = ? WHERE name = ?";
+    
+    db.query(updateQuery, [imageBuffer, username], (err, result) => {
+      if (err) {
+        console.error("Database update error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to update profile image"
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      console.log("Profile image updated successfully for:", username);
+      res.json({
+        success: true,
+        message: "Profile image updated successfully"
+      });
+    });
+
+  } catch (error) {
+    console.error("Server error during photo update:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating profile photo"
+    });
+  }
+});
+
+// Get Profile Information
+app.get("/customer/profile/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    console.log("Fetching profile for:", username);
+
+    const query = "SELECT username, name, profile_image FROM customers WHERE username = ?";
+    
+    db.query(query, [username], (err, results) => {
+      if (err) {
+        console.error("Profile fetch error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch profile",
+          error: err.message,
+        });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const profile = results[0];
+      res.json({
+        success: true,
+        username: profile.username,
+        name: profile.name,
+        profile_image: profile.profile_image 
+          ? `data:image/jpeg;base64,${profile.profile_image.toString('base64')}`
+          : null,
+      });
+    });
+  } catch (error) {
+    console.error("Server error during profile fetch:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching profile",
+    });
+  }
+});
+
+// Update Username (if needed)
+app.post("/customer/profile/update-username", express.json(), async (req, res) => {
+  try {
+    const { currentUsername, newUsername } = req.body;
+    console.log("Username update request:", { currentUsername, newUsername });
+
+    if (!currentUsername || !newUsername) {
+      return res.status(400).json({
+        success: false,
+        message: "Current and new username are required"
+      });
+    }
+
+    if (newUsername.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "New username cannot be empty"
+      });
+    }
+
+    // First check if new username already exists
+    const checkQuery = "SELECT username FROM customers WHERE username = ?";
+    db.query(checkQuery, [newUsername], (checkErr, checkResults) => {
+      if (checkErr) {
+        console.error("Username check error:", checkErr);
+        return res.status(500).json({
+          success: false,
+          message: "Error checking username availability"
+        });
+      }
+
+      if (checkResults.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Username already taken"
+        });
+      }
+
+      // If username is available, proceed with update
+      // Changed the query to use name instead of username
+      const updateQuery = "UPDATE customers SET username = ? WHERE name = ?";
+      db.query(updateQuery, [newUsername, currentUsername], (updateErr, result) => {
+        if (updateErr) {
+          console.error("Username update error:", updateErr);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to update username"
+          });
+        }
+
+        if (result.affectedRows === 0) {
+          // Add debug log
+          console.log("No rows affected. Current values:", {
+            newUsername,
+            currentUsername,
+            sql: updateQuery
+          });
+          return res.status(404).json({
+            success: false,
+            message: "User not found"
+          });
+        }
+
+        console.log("Username updated successfully:", {
+          from: currentUsername,
+          to: newUsername
+        });
+        
+        res.json({
+          success: true,
+          message: "Username updated successfully",
+          newUsername: newUsername
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Server error during username update:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating username"
+    });
   }
 });
