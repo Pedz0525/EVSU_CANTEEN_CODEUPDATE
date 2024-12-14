@@ -119,7 +119,7 @@ export default function Vendor_Dashboard({ navigation, route }) {
           setItems(itemsResponse.data.items);
         }
       } catch (error) {
-        console.error("Error fetching vendor data:", error);
+        console.log("Error fetching vendor data:", error);
       } finally {
         setLoading(false);
       }
